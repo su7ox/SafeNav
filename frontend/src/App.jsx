@@ -2,222 +2,188 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { 
   ShieldCheck, AlertTriangle, XOctagon, Loader2, 
-  Globe, Lock, History, ListTree, Activity, FileText, User, Moon 
+  Globe, Lock, Activity, Search, Server, Share2, 
+  CheckCircle2
 } from 'lucide-react';
 
 const App = () => {
   const [url, setUrl] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // Ensure backend URL is correct based on your FastAPI setup
   const BACKEND_URL = 'http://localhost:8000';
 
   const handleScan = async (e) => {
     e.preventDefault();
     if (!url) return;
+    
     setLoading(true);
+    setResult(null);
+    setError('');
+
     try {
       const response = await axios.post(`${BACKEND_URL}/api/v1/scan`, { url });
       setResult(response.data);
-    } catch (error) {
-      console.error("Scan Error:", error);
-      alert(`Scan failed. Please ensure the backend is running at ${BACKEND_URL}`);
+    } catch (err) {
+      console.error(err);
+      setError('Connection failed. Ensure the backend is running on port 8000.');
     }
     setLoading(false);
   };
 
-  const getVerdict = (score) => {
-    if (score <= 30) return { color: 'text-emerald-600', icon: <ShieldCheck className="w-12 h-12" />, label: 'Safe to Visit', bg: 'bg-emerald-50', border: 'border-emerald-100' };
-    if (score <= 69) return { color: 'text-amber-600', icon: <AlertTriangle className="w-12 h-12" />, label: 'Caution Advised', bg: 'bg-amber-50', border: 'border-amber-100' };
-    return { color: 'text-rose-600', icon: <XOctagon className="w-12 h-12" />, label: 'High Risk Detected', bg: 'bg-rose-50', border: 'border-rose-100' };
-  };
-
-  const verdictData = result ? getVerdict(result.risk_score) : null;
-
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 p-4 md:p-8 font-sans">
-      {/* --- Advanced CSS Injection --- */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    <div className="min-h-screen text-slate-50 p-6 md:p-12">
+      <div className="max-w-5xl mx-auto space-y-12">
         
-        .font-sans { font-family: 'Plus Jakarta Sans', sans-serif; }
-
-        .rounded-\[2\.5rem\] {
-          transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-          box-shadow: 0 20px 50px rgba(0,0,0,0.05), 10px 10px 0px rgba(0,0,0,0.01);
-        }
-
-        .rounded-\[2\.5rem\]:hover {
-          transform: translateY(-6px);
-          box-shadow: 0 40px 80px rgba(0,0,0,0.08), 15px 15px 0px rgba(0,0,0,0.02);
-        }
-
-        .bg-slate-50\\/80 {
-          backdrop-filter: blur(8px);
-          position: relative;
-          overflow: hidden;
-          background: linear-gradient(135deg, rgba(248, 250, 252, 0.9), rgba(241, 245, 249, 0.7));
-        }
-
-        .bg-slate-50\\/80::after {
-          content: '';
-          position: absolute;
-          top: -50%;
-          left: -50%;
-          width: 200%;
-          height: 200%;
-          background: radial-gradient(circle at center, rgba(37, 99, 235, 0.03) 0%, transparent 70%);
-          animation: rotate-slow 15s linear infinite;
-        }
-
-        @keyframes rotate-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        svg {
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));
-          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .group:hover svg {
-          transform: scale(1.2) rotate(-5deg);
-          filter: drop-shadow(0 4px 8px rgba(37, 99, 235, 0.2));
-        }
-
-        button[type="submit"] {
-          position: relative;
-          overflow: hidden;
-        }
-
-        button[type="submit"]::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-          transition: 0.5s;
-        }
-
-        button[type="submit"]:hover::before {
-          left: 100%;
-        }
-      `}} />
-
-      <div className="max-w-6xl mx-auto">
-        {/* --- Navbar --- */}
-        <nav className="flex justify-between items-center mb-16 pt-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/20">
-              <ShieldCheck className="text-white w-7 h-7" strokeWidth={2.5} />
-            </div>
-            <span className="text-3xl font-black tracking-tighter text-slate-900">SafeNav</span>
+        {/* --- Header --- */}
+        <div className="flex flex-col items-center text-center space-y-4 animate-fade-in-down">
+          <div className="inline-flex items-center justify-center p-3 bg-blue-600/20 rounded-2xl ring-1 ring-blue-500/50 mb-2">
+            <ShieldCheck className="w-8 h-8 text-blue-400" />
           </div>
-          <div className="flex items-center gap-6 text-slate-400 transition-colors">
-            <button className="hover:text-slate-900 transition-colors"><Moon size={24} strokeWidth={2} /></button>
-            <button className="hover:text-slate-900 transition-colors"><User size={24} strokeWidth={2} /></button>
-          </div>
-        </nav>
-
-        {/* --- Hero Section & Search --- */}
-        <section className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-black text-slate-900 mb-8 tracking-tight leading-tight">
-            Scan links. <br className="hidden md:block" />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-              Reveal hidden risks.
-            </span>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+            Safe<span className="text-blue-500">Nav</span> Intelligence
           </h1>
-          <form onSubmit={handleScan} className="flex flex-col md:flex-row gap-4 justify-center max-w-3xl mx-auto relative z-10">
-            <div className="flex-1 relative">
-               <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
-              <input 
-                type="text" value={url} onChange={(e) => setUrl(e.target.value)}
-                placeholder="Paste URL here (e.g., google.com)..."
-                className="w-full border-2 border-slate-200 rounded-2xl pl-12 pr-6 py-4 text-lg font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm bg-white placeholder:text-slate-400"
-              />
-            </div>
-            <button type="submit" disabled={loading || !url} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all shadow-xl shadow-blue-500/30 disabled:opacity-70 disabled:cursor-not-allowed disabled:shadow-none text-sm md:text-base flex items-center justify-center min-w-[140px]">
-              {loading ? <Loader2 className="animate-spin w-6 h-6" /> : 'ANALYZE'}
+          <p className="text-slate-400 text-lg max-w-xl">
+            Analyze suspicious links using real-time machine learning and static analysis.
+          </p>
+        </div>
+
+        {/* --- Search Bar --- */}
+        <div className="max-w-2xl mx-auto relative group z-10">
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+          <form onSubmit={handleScan} className="relative flex items-center bg-slate-800/80 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-2">
+            <Globe className="ml-4 text-slate-400 w-5 h-5" />
+            <input 
+              type="text" 
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Enter URL to scan (e.g., google.com)..." 
+              className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-slate-500 text-lg px-4 py-3 outline-none"
+            />
+            <button 
+              type="submit" 
+              disabled={loading || !url}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <><Search className="w-4 h-4" /> Scan</>}
             </button>
           </form>
-        </section>
+          {error && <p className="text-red-400 text-center mt-4 font-medium">{error}</p>}
+        </div>
 
-        {/* --- Results Card --- */}
-        {result && verdictData && (
-          <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-lg relative overflow-hidden border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        {/* --- Results Section --- */}
+        {result && (
+          <div className="space-y-8 animate-fade-in-up">
             
-            {/* Header Row: Verdict & Score */}
-            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 mb-12 border-b-2 border-slate-50 pb-10">
-              <div className="flex items-start gap-6">
-                <div className={`p-4 rounded-2xl ${verdictData.bg} ${verdictData.border} border-2`}>
-                  <div className={verdictData.color}>
-                    {verdictData.icon}
+            {/* 1. Verdict Banner */}
+            <VerdictCard score={result.risk_score} verdict={result.verdict} />
+
+            {/* 2. Main Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              
+              {/* Left Col: Analysis Summary */}
+              <div className="md:col-span-2 space-y-6">
+                
+                {/* Reasoning Panel */}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 h-full">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Activity className="w-4 h-4" /> Analysis Report
+                  </h3>
+                  
+                  {result.reasoning && result.reasoning.length > 0 ? (
+                    <div className="space-y-3">
+                      {result.reasoning.map((reason, idx) => (
+                        <div key={idx} className="flex items-start gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                          <span className="text-slate-200 font-medium">{reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                      <div>
+                        <p className="text-emerald-400 font-bold">No Threats Detected</p>
+                        <p className="text-emerald-500/80 text-sm">Static analysis found no obvious malicious patterns.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Col: Score & Technicals */}
+              <div className="space-y-6">
+                
+                {/* Score Card */}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                   <div className="relative mb-4">
+                     <svg className="w-32 h-32 transform -rotate-90">
+                       <circle cx="64" cy="64" r="56" stroke="#1e293b" strokeWidth="8" fill="transparent" />
+                       <circle 
+                         cx="64" cy="64" r="56" 
+                         stroke={result.risk_score > 70 ? '#f43f5e' : result.risk_score > 30 ? '#f59e0b' : '#10b981'} 
+                         strokeWidth="8" 
+                         fill="transparent" 
+                         strokeDasharray={351} 
+                         strokeDashoffset={351 - (351 * result.risk_score) / 100} 
+                         className="transition-all duration-1000 ease-out"
+                       />
+                     </svg>
+                     <div className="absolute inset-0 flex items-center justify-center flex-col">
+                       <span className="text-3xl font-black">{result.risk_score}</span>
+                       <span className="text-xs text-slate-500 uppercase font-bold">Risk Score</span>
+                     </div>
+                   </div>
+                   <p className="text-sm text-slate-400">
+                     ML Confidence: <span className="text-slate-200 font-bold">
+                       {result.details?.ml_probability ? (result.details.ml_probability * 100).toFixed(1) : 0}%
+                     </span>
+                   </p>
+                </div>
+
+                {/* Final URL Card */}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Final Destination</h3>
+                  <div className="flex items-center gap-2 text-blue-400 mb-1">
+                    <Share2 className="w-4 h-4 shrink-0" />
+                    <span className="font-mono text-sm truncate w-full block" title={result.final_destination}>
+                      {result.final_destination}
+                    </span>
                   </div>
                 </div>
-                <div>
-                  <h2 className={`text-4xl md:text-5xl font-black italic uppercase leading-none tracking-tight ${verdictData.color}`}>
-                    {verdictData.label}
-                  </h2>
-                  <div className="flex items-center gap-2 mt-4 text-slate-500 font-bold bg-slate-50 py-2 px-4 rounded-lg inline-flex">
-                    <Globe size={18} strokeWidth={2.5} />
-                    <span className="text-sm uppercase tracking-wider">Target: <b className="text-slate-900 ml-1">{result.hostname}</b></span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className={`${verdictData.bg} px-10 py-6 rounded-[2rem] border-2 ${verdictData.border} text-center min-w-[200px]`}>
-                <p className={`text-xs uppercase font-black tracking-[0.25em] mb-2 ${verdictData.color} opacity-80`}>Risk Score</p>
-                <div className="flex items-baseline justify-center">
-                  <span className={`text-7xl font-black leading-none ${verdictData.color}`}>{result.risk_score}</span>
-                  <span className={`text-3xl font-bold ml-1 opacity-60 ${verdictData.color}`}>/100</span>
-                </div>
+
               </div>
             </div>
 
-            {/* AI Insight Section */}
-            <div className="mb-14 relative">
-               <div className="absolute -top-3 left-8 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-full shadow-sm z-10">
-                 AI Security Insight
-               </div>
-              <div className="bg-slate-50/80 p-8 pt-10 rounded-3xl border-2 border-slate-100/80 italic text-slate-600 text-lg font-medium leading-relaxed relative z-0">
-                <p>
-                  "This section is reserved for the generative AI summary of the URL's intent and content. Log in to unlock this premium feature."
-                </p>
-              </div>
+            {/* 3. Tech Specs Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <InfoCard 
+                  icon={<Server className="w-5 h-5 text-indigo-400" />}
+                  label="Redirect Hops" 
+                  value={result.details?.hop_count || 0}
+                  subtext="Chain Length"
+                />
+                <InfoCard 
+                  icon={<Lock className="w-5 h-5 text-rose-400" />}
+                  label="SSL Age" 
+                  value={result.details?.cert_age ? `${result.details.cert_age} Days` : "N/A"}
+                  subtext="Certificate Validity"
+                />
+                 <InfoCard 
+                  icon={<Globe className="w-5 h-5 text-cyan-400" />}
+                  label="URL Length" 
+                  value={result.url.length}
+                  subtext="Characters"
+                />
+                 <InfoCard 
+                  icon={<Activity className="w-5 h-5 text-emerald-400" />}
+                  label="Status" 
+                  value="Active"
+                  subtext="Server Response"
+                />
             </div>
 
-            {/* Data Grid Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-24 gap-y-10">
-              <div className="space-y-2">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 border-b border-slate-100 pb-2">Threat Indicators</h3>
-                <DataRow label="Spam/Abuse TLD" value={result.risk_score > 70 ? "High Probability" : "Low"} isBad={result.risk_score > 70} />
-                <DataRow label="Typosquatting Intent" value={result.details?.lexical?.typosquat_target ? `Targeting: ${result.details.lexical.typosquat_target}` : "None Detected"} isBad={result.details?.lexical?.typosquat_target} />
-                <DataRow label="Heuristic Flags" value={result.reasoning.length > 0 ? `${result.reasoning.length} Flags Found` : "Clean"} isBad={result.reasoning.length > 0} />
-                <DataRow label="DNS Resolution" value="Successfully Resolved" />
-                <DataRow label="Overall Trust Rating" value={result.risk_score < 30 ? "Trusted" : result.risk_score < 70 ? "Neutral" : "Untrusted"} isBad={result.risk_score >= 70} />
-              </div>
-              
-              <div className="space-y-2">
-                 <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 border-b border-slate-100 pb-2">Technical Footprint</h3>
-                <DetailRow icon={<ListTree size={20}/>} label="Redirect Chain" value={`${result.details?.trace?.hop_count || 0} Hops`} />
-                <DetailRow icon={<Lock size={20}/>} label="SSL/TLS Issuer" value={result.details?.ssl?.issuer || "Insecure Connection"} isBad={!result.details?.ssl?.issuer} />
-                <DetailRow icon={<History size={20}/>} label="Domain Age" value={result.details?.reputation?.domain_age_days ? `${result.details.reputation.domain_age_days} Days` : "Unknown/Redacted"} isBad={result.details?.reputation?.domain_age_days < 30} />
-                <DetailRow icon={<Activity size={20}/>} label="HTTP Status" value="200 OK (Live)" />
-                <DetailRow icon={<FileText size={20}/>} label="Content Size" value="N/A (Static Scan)" />
-              </div>
-            </div>
-
-            {/* Disabled Deep Scan Button */}
-            <div className="mt-16 text-center">
-              <button disabled className="px-12 py-5 bg-slate-100 text-slate-400 rounded-2xl font-black uppercase tracking-widest text-xs border-2 border-slate-200 cursor-not-allowed opacity-80 transition-all group relative overflow-hidden">
-                 <span className="relative z-10 flex items-center justify-center gap-2">
-                   <Lock size={16} /> Initialize Deep Scan Analysis (Login Required)
-                 </span>
-              </button>
-            </div>
           </div>
         )}
       </div>
@@ -225,21 +191,44 @@ const App = () => {
   );
 };
 
-// Helper Components
-const DataRow = ({ label, value, isBad }) => (
-  <div className="flex justify-between items-center border-b-2 border-slate-50 py-4 group hover:bg-slate-50/50 transition-colors px-2 rounded-lg">
-    <span className="text-[13px] font-black text-slate-700 uppercase tracking-wider">{label}</span>
-    <span className={`text-[15px] font-bold ${isBad ? 'text-rose-600' : 'text-slate-600'} text-right`}>{value}</span>
-  </div>
-);
+// --- Subcomponents ---
 
-const DetailRow = ({ icon, label, value, isBad }) => (
-  <div className="flex justify-between items-center border-b-2 border-slate-50 py-4 group hover:bg-slate-50/50 transition-colors px-2 rounded-lg">
-    <div className="flex items-center gap-3 text-slate-400 group-hover:text-blue-600 transition-colors">
-      {icon}
-      <span className="text-[13px] font-black uppercase tracking-wider text-slate-700">{label}</span>
+const VerdictCard = ({ score, verdict }) => {
+  let theme = { bg: 'bg-emerald-600', icon: <ShieldCheck className="w-12 h-12 text-white" />, text: 'Safe to Access' };
+  
+  if (score > 70) {
+    theme = { bg: 'bg-rose-600', icon: <XOctagon className="w-12 h-12 text-white" />, text: 'High Risk Detected' };
+  } else if (score > 30) {
+    theme = { bg: 'bg-amber-500', icon: <AlertTriangle className="w-12 h-12 text-white" />, text: 'Caution Advised' };
+  }
+
+  return (
+    <div className={`${theme.bg} rounded-2xl p-8 shadow-xl shadow-slate-900/20 relative overflow-hidden`}>
+       {/* Background Pattern */}
+       <div className="absolute top-0 right-0 p-8 opacity-10 transform rotate-12 scale-150">
+         {theme.icon}
+       </div>
+       
+       <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
+         <div className="bg-white/20 p-4 rounded-xl backdrop-blur-sm shadow-inner">
+           {theme.icon}
+         </div>
+         <div className="text-center md:text-left">
+           <h2 className="text-3xl font-black text-white tracking-tight uppercase">{verdict}</h2>
+           <p className="text-white/90 font-medium mt-1">Based on static, heuristic, and ML analysis protocols.</p>
+         </div>
+       </div>
     </div>
-    <span className={`text-[15px] font-bold ${isBad ? 'text-rose-600' : 'text-slate-600'} text-right truncate max-w-[150px] sm:max-w-none`}>{value}</span>
+  );
+};
+
+const InfoCard = ({ icon, label, value, subtext }) => (
+  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 hover:bg-slate-800 transition-colors group">
+    <div className="flex justify-between items-start mb-3">
+      <div className="p-2 bg-slate-700/50 rounded-lg group-hover:scale-110 transition-transform">{icon}</div>
+    </div>
+    <div className="text-2xl font-bold text-slate-100">{value}</div>
+    <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mt-1">{label}</div>
   </div>
 );
 
