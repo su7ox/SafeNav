@@ -1,0 +1,13 @@
+fastapi[standard]
+uvicorn
+httpx
+scikit-learn
+beautifulsoup4
+tldextract
+idna
+python-levenshtein
+dnspython
+python-whois
+cryptography
+redis
+joblib
