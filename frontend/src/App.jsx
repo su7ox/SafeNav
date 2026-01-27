@@ -4,11 +4,11 @@ import {
   ShieldCheck, AlertTriangle, XOctagon, Loader2, 
   Globe, Lock, Activity, Search, Server, Share2, 
   CheckCircle2, LayoutDashboard, History, Settings, 
-  Menu, X, Trash2
+  Menu, X, Trash2, Moon, User
 } from 'lucide-react';
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('scan'); // 'scan', 'history'
+  const [activeTab, setActiveTab] = useState('scan');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [recentScans, setRecentScans] = useState([]);
 
@@ -26,7 +26,7 @@ const App = () => {
       verdict: scanResult.verdict,
       date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-    const updated = [newEntry, ...recentScans].slice(0, 15); // Keep last 15
+    const updated = [newEntry, ...recentScans].slice(0, 15);
     setRecentScans(updated);
     localStorage.setItem('safenav_history', JSON.stringify(updated));
   };
@@ -37,75 +37,32 @@ const App = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a] text-slate-50 font-sans overflow-hidden">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 font-sans overflow-hidden">
       
-      {/* --- Sidebar (Desktop) --- */}
-      <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800 p-6 space-y-8 z-20">
-        <div className="flex items-center gap-3 px-2">
-          <div className="bg-blue-600/20 p-2 rounded-lg ring-1 ring-blue-500/30">
-            <ShieldCheck className="w-6 h-6 text-blue-500" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">Safe<span className="text-blue-500">Nav</span></span>
-        </div>
-
-        <nav className="space-y-2 flex-1">
-          <NavItem 
-            icon={<LayoutDashboard />} 
-            label="Scanner" 
-            active={activeTab === 'scan'} 
-            onClick={() => setActiveTab('scan')} 
-          />
-          <NavItem 
-            icon={<History />} 
-            label="Recent History" 
-            active={activeTab === 'history'} 
-            onClick={() => setActiveTab('history')} 
-          />
-          <div className="pt-4 pb-2">
-            <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">System</p>
-          </div>
-          <NavItem 
-            icon={<Settings />} 
-            label="Settings" 
-            active={activeTab === 'settings'} 
-            onClick={() => {}} 
-          />
-        </nav>
-
-        {/* Mini Stat */}
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-          <p className="text-xs text-slate-400 font-medium uppercase">Total Scans Run</p>
-          <p className="text-3xl font-bold text-white mt-1">{recentScans.length}</p>
-        </div>
-      </aside>
-
       {/* --- Main Content --- */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         
-        {/* Mobile Header */}
-        <div className="md:hidden flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur z-30">
+        {/* Top Navigation Bar */}
+        <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
           <div className="flex items-center gap-2">
-             <ShieldCheck className="w-6 h-6 text-blue-500" />
-             <span className="font-bold text-lg">SafeNav</span>
+            <div className="bg-blue-500 p-2 rounded-lg">
+              <ShieldCheck className="w-6 h-6 text-white" />
+            </div>
+            <span className="font-bold text-xl text-slate-900">SafeNav</span>
           </div>
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X /> : <Menu />}
-          </button>
+          
+          <div className="flex items-center gap-3">
+            <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+              <Moon className="w-5 h-5 text-slate-600" />
+            </button>
+            <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+              <User className="w-5 h-5 text-slate-600" />
+            </button>
+          </div>
         </div>
 
-        {/* Mobile Menu Overlay */}
-        {mobileMenuOpen && (
-          <div className="md:hidden absolute inset-0 bg-slate-900 z-20 p-6 space-y-4">
-             <NavItem icon={<LayoutDashboard />} label="Scanner" active={activeTab === 'scan'} onClick={() => {setActiveTab('scan'); setMobileMenuOpen(false)}} />
-             <NavItem icon={<History />} label="History" active={activeTab === 'history'} onClick={() => {setActiveTab('history'); setMobileMenuOpen(false)}} />
-          </div>
-        )}
-
         {/* Scrollable Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 relative scroll-smooth">
-           {/* Background Gradient */}
-           <div className="absolute top-0 left-0 w-full h-[500px] bg-blue-600/5 blur-[100px] pointer-events-none rounded-full transform -translate-y-1/2"></div>
-
+        <div className="flex-1 overflow-y-auto p-8 relative scroll-smooth">
            <div className="max-w-5xl mx-auto relative z-10">
              {activeTab === 'scan' ? (
                <ScannerView onScanComplete={addToHistory} />
@@ -150,106 +107,144 @@ const ScannerView = ({ onScanComplete }) => {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in-down pb-20">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Threat Scanner</h2>
-        <p className="text-slate-400">Enter a URL below to analyze its safety using our ML engine and heuristic scanners.</p>
+    <div className="space-y-8 pb-20">
+      {/* Hero Section */}
+      <div className="text-center space-y-4 py-8">
+        <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">
+          Scan links. Reveal hidden risks.
+        </h1>
       </div>
 
       {/* Search Input */}
-      <form onSubmit={handleScan} className="relative group max-w-3xl">
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
-        <div className="relative flex items-center bg-slate-900 border border-slate-700 rounded-xl p-2 shadow-2xl">
-          <Globe className="ml-3 text-slate-500 w-5 h-5" />
+      <form onSubmit={handleScan} className="max-w-3xl mx-auto">
+        <div className="flex items-center bg-white border-2 border-slate-200 rounded-2xl p-3 shadow-lg hover:border-blue-300 transition-colors">
+          <Globe className="ml-2 text-slate-400 w-5 h-5" />
           <input 
             type="text" 
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://example.com" 
-            className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-slate-500 px-4 py-3 outline-none text-lg"
+            placeholder="Paste URL here (e.g., google.com)..." 
+            className="flex-1 bg-transparent border-none focus:ring-0 text-slate-700 placeholder-slate-400 px-4 py-3 outline-none"
           />
           <button 
             type="submit" 
             disabled={loading || !url}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20"
+            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed uppercase text-sm tracking-wide"
           >
-            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Scan Now'}
+            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'ANALYZE'}
           </button>
         </div>
-        {error && <p className="text-red-400 mt-3 text-sm flex items-center gap-2 font-medium bg-red-400/10 p-2 rounded-lg border border-red-400/20"><AlertTriangle className="w-4 h-4"/> {error}</p>}
+        {error && <p className="text-red-500 mt-3 text-sm flex items-center gap-2 font-medium bg-red-50 p-3 rounded-lg border border-red-200"><AlertTriangle className="w-4 h-4"/> {error}</p>}
       </form>
 
       {/* Results Display */}
       {result && (
-        <div className="space-y-6 animate-fade-in-up">
-           <VerdictCard score={result.risk_score} verdict={result.verdict} />
-           
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             <div className="md:col-span-2 space-y-4">
-                <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6">
-                   <h3 className="text-sm font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
-                     <Activity className="w-4 h-4" /> Security Analysis
-                   </h3>
-                   <div className="space-y-3">
-                      {result.reasoning?.map((r, i) => (
-                        <div key={i} className="flex gap-3 text-sm text-slate-300 bg-slate-900/50 p-4 rounded-lg border border-slate-700/30">
-                          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                          <span className="font-medium">{r}</span>
-                        </div>
-                      ))}
-                      {(!result.reasoning || result.reasoning.length === 0) && (
-                        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-                          <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                          <p className="text-emerald-400 text-sm font-medium">
-                            No active threats or malicious patterns were detected by the engine.
-                          </p>
-                        </div>
-                      )}
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                   <DetailCard label="Redirect Hops" value={result.details?.hop_count || 0} icon={<Server className="w-5 h-5 text-indigo-400"/>} />
-                   <DetailCard label="SSL Age" value={result.details?.cert_age ? `${result.details.cert_age} Days` : 'N/A'} icon={<Lock className="w-5 h-5 text-rose-400"/>} />
-                </div>
-             </div>
-
-             <div className="space-y-4">
-               {/* Gauge Card */}
-               <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
-                  <div className="relative mb-4">
-                    <svg className="w-32 h-32 transform -rotate-90">
-                      <circle cx="64" cy="64" r="56" stroke="#1e293b" strokeWidth="8" fill="transparent" />
-                      <circle 
-                        cx="64" cy="64" r="56" 
-                        stroke={result.risk_score > 70 ? '#f43f5e' : result.risk_score > 30 ? '#f59e0b' : '#10b981'} 
-                        strokeWidth="8" 
-                        fill="transparent" 
-                        strokeDasharray={351} 
-                        strokeDashoffset={351 - (351 * result.risk_score) / 100} 
-                        className="transition-all duration-1000 ease-out"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center flex-col">
-                      <span className="text-4xl font-black text-white">{result.risk_score}</span>
-                      <span className="text-[10px] uppercase font-bold text-slate-500 mt-1">Risk Score</span>
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xs text-slate-400 font-medium bg-slate-700/30 px-3 py-1 rounded-full">
-                      ML Confidence: {(result.details?.ml_probability * 100 || 0).toFixed(1)}%
-                    </div>
-                  </div>
+        <div className="space-y-6 max-w-4xl mx-auto">
+           {/* Main Result Card */}
+           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200">
+             <div className="flex items-start justify-between mb-6">
+               <div className="flex items-center gap-4">
+                 <div className={`p-4 rounded-2xl ${
+                   result.risk_score > 70 ? 'bg-red-100' : 
+                   result.risk_score > 30 ? 'bg-yellow-100' : 
+                   'bg-green-100'
+                 }`}>
+                   {result.risk_score > 70 ? <XOctagon className="w-8 h-8 text-red-600" /> :
+                    result.risk_score > 30 ? <AlertTriangle className="w-8 h-8 text-yellow-600" /> :
+                    <ShieldCheck className="w-8 h-8 text-green-600" />}
+                 </div>
+                 <div>
+                   <h2 className={`text-3xl font-bold uppercase ${
+                     result.risk_score > 70 ? 'text-red-600' : 
+                     result.risk_score > 30 ? 'text-yellow-600' : 
+                     'text-green-600'
+                   }`}>
+                     {result.verdict}
+                   </h2>
+                   <p className="text-slate-500 text-sm mt-1">Target: <span className="font-semibold text-slate-700">{result.url}</span></p>
+                 </div>
                </div>
                
-               {/* Destination Card */}
-               <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 break-all">
-                  <div className="text-xs text-slate-500 uppercase font-bold mb-2">Final Destination</div>
-                  <div className="text-blue-400 text-sm font-mono flex items-start gap-2">
-                    <Share2 className="w-4 h-4 mt-0.5 shrink-0" />
-                    {result.final_destination}
-                  </div>
+               <div className="text-right">
+                 <div className="text-5xl font-bold text-slate-900">{result.risk_score}<span className="text-2xl text-slate-400">/100</span></div>
+                 <div className="text-sm font-semibold text-slate-500 uppercase tracking-wide">RISK SCORE</div>
                </div>
+             </div>
+
+             {/* AI Security Insight */}
+             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+               <div className="flex items-center gap-2 mb-3">
+                 <div className="bg-blue-100 p-2 rounded-lg">
+                   <Activity className="w-4 h-4 text-blue-600" />
+                 </div>
+                 <h3 className="font-bold text-slate-900">AI Security Insight</h3>
+               </div>
+               
+               {result.reasoning && result.reasoning.length > 0 ? (
+                 <div className="space-y-2">
+                   {result.reasoning.map((r, i) => (
+                     <p key={i} className="text-sm text-slate-600">{r}</p>
+                   ))}
+                 </div>
+               ) : (
+                 <p className="text-sm text-slate-500">
+                   Premium features will be found by your fens hiddle messable to get certain with premium features as the linkay. <a href="#" className="text-blue-600 font-semibold hover:underline">Learn more.</a>
+                 </p>
+               )}
+             </div>
+
+             {/* Two Column Layout */}
+             <div className="grid grid-cols-2 gap-6 mt-6">
+               {/* Threat Indicators */}
+               <div>
+                 <h3 className="font-bold text-slate-900 mb-4">Threat Indicators</h3>
+                 <div className="space-y-3">
+                   <IndicatorRow 
+                     label="Spam/Abuse TLD:" 
+                     value="Low" 
+                     valueClass="text-green-600 font-semibold"
+                   />
+                   <IndicatorRow 
+                     label="Typosquatting Intent:" 
+                     value="None Detected" 
+                     valueClass="text-slate-600"
+                   />
+                   <IndicatorRow 
+                     label="SSL/TLS Cance TLD:" 
+                     value="Low" 
+                     valueClass="text-green-600 font-semibold"
+                   />
+                 </div>
+               </div>
+
+               {/* Technical Footprint */}
+               <div>
+                 <h3 className="font-bold text-slate-900 mb-4">Technical Footprint</h3>
+                 <div className="space-y-3">
+                   <IndicatorRow 
+                     label="SSL/TLS Issuer:" 
+                     value="Google Trust Services" 
+                     valueClass="text-slate-600"
+                   />
+                   <IndicatorRow 
+                     label="Domain Age:" 
+                     value="9000+ Days" 
+                     valueClass="text-slate-600"
+                   />
+                   <IndicatorRow 
+                     label="Domain Age (nge):" 
+                     value="9000+ Days" 
+                     valueClass="text-slate-600"
+                   />
+                 </div>
+               </div>
+             </div>
+
+             {/* Deep Scan Button */}
+             <div className="mt-6">
+               <button className="w-full bg-slate-200 text-slate-400 py-4 rounded-xl font-semibold text-sm cursor-not-allowed">
+                 Initialize Deep Scan Analysis (Login Required)
+               </button>
              </div>
            </div>
         </div>
@@ -259,26 +254,26 @@ const ScannerView = ({ onScanComplete }) => {
 };
 
 const HistoryView = ({ scans, onClear }) => (
-  <div className="space-y-6 animate-fade-in-down pb-20">
+  <div className="space-y-6 pb-20">
     <div className="flex items-center justify-between">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Recent Scans</h2>
-        <p className="text-slate-400">Local history of your last 15 security checks.</p>
+        <p className="text-slate-600">Local history of your last 15 security checks.</p>
       </div>
       {scans.length > 0 && (
         <button 
           onClick={onClear} 
-          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-300 transition-colors border border-slate-700"
+          className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 rounded-lg text-sm text-slate-700 transition-colors border border-slate-200"
         >
           <Trash2 className="w-4 h-4" /> Clear Log
         </button>
       )}
     </div>
 
-    <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl overflow-hidden shadow-xl">
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg">
       {scans.length === 0 ? (
         <div className="p-20 text-center text-slate-500 flex flex-col items-center">
-          <div className="bg-slate-800 p-4 rounded-full mb-4">
+          <div className="bg-slate-100 p-4 rounded-full mb-4">
             <History className="w-8 h-8 opacity-40" />
           </div>
           <p className="text-lg font-medium">No scan history available</p>
@@ -287,7 +282,7 @@ const HistoryView = ({ scans, onClear }) => (
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-900/50 text-slate-400 uppercase text-xs font-bold tracking-wider">
+            <thead className="bg-slate-50 text-slate-600 uppercase text-xs font-bold tracking-wider">
               <tr>
                 <th className="p-5">Target URL</th>
                 <th className="p-5">Time Scanned</th>
@@ -295,23 +290,23 @@ const HistoryView = ({ scans, onClear }) => (
                 <th className="p-5 text-right">Risk Score</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700/50">
+            <tbody className="divide-y divide-slate-200">
               {scans.map((scan) => (
-                <tr key={scan.id} className="hover:bg-slate-700/20 transition-colors group cursor-default">
-                  <td className="p-5 font-mono text-blue-400 truncate max-w-[250px] group-hover:text-blue-300">
+                <tr key={scan.id} className="hover:bg-slate-50 transition-colors group cursor-default">
+                  <td className="p-5 font-mono text-blue-600 truncate max-w-[250px] group-hover:text-blue-700">
                     {scan.url}
                   </td>
-                  <td className="p-5 text-slate-400">{scan.date}</td>
+                  <td className="p-5 text-slate-600">{scan.date}</td>
                   <td className="p-5">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                      scan.score > 70 ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 
-                      scan.score > 30 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 
-                      'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      scan.score > 70 ? 'bg-red-100 text-red-600' : 
+                      scan.score > 30 ? 'bg-yellow-100 text-yellow-600' : 
+                      'bg-green-100 text-green-600'
                     }`}>
                       {scan.verdict}
                     </span>
                   </td>
-                  <td className="p-5 text-right font-bold text-slate-200">{scan.score}</td>
+                  <td className="p-5 text-right font-bold text-slate-900">{scan.score}</td>
                 </tr>
               ))}
             </tbody>
@@ -324,56 +319,10 @@ const HistoryView = ({ scans, onClear }) => (
 
 // --- Subcomponents ---
 
-const NavItem = ({ icon, label, active, onClick }) => (
-  <button 
-    onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-      active ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-    }`}
-  >
-    {React.cloneElement(icon, { size: 18, className: active ? 'text-white' : 'text-slate-500 group-hover:text-slate-300' })}
-    <span className="font-medium text-sm">{label}</span>
-    {active && <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full"></div>}
-  </button>
-);
-
-const VerdictCard = ({ score, verdict }) => {
-  let theme = { bg: 'bg-emerald-600', border: 'border-emerald-500', icon: <ShieldCheck className="w-8 h-8" /> };
-  
-  if (score > 70) {
-    theme = { bg: 'bg-rose-600', border: 'border-rose-500', icon: <XOctagon className="w-8 h-8" /> };
-  } else if (score > 30) {
-    theme = { bg: 'bg-amber-500', border: 'border-amber-500', icon: <AlertTriangle className="w-8 h-8" /> };
-  }
-
-  return (
-    <div className={`${theme.bg} rounded-xl p-8 shadow-xl relative overflow-hidden flex items-center justify-between border-t border-white/10`}>
-       {/* Decorative Pattern */}
-       <div className="absolute top-0 right-0 p-8 opacity-10 transform rotate-12 scale-150 pointer-events-none">
-         {theme.icon}
-       </div>
-       
-       <div className="relative z-10 text-white">
-         <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                {theme.icon}
-            </div>
-            <span className="text-sm font-bold opacity-90 uppercase tracking-widest">System Verdict</span>
-         </div>
-         <h2 className="text-4xl font-black uppercase tracking-tight">{verdict}</h2>
-         <p className="text-white/90 text-sm font-medium mt-1 opacity-80">Target analyzed successfully.</p>
-       </div>
-    </div>
-  );
-};
-
-const DetailCard = ({ label, value, icon }) => (
-  <div className="bg-slate-800/40 border border-slate-700/50 p-5 rounded-xl flex items-center justify-between hover:bg-slate-800/60 transition-colors">
-    <div>
-      <div className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">{label}</div>
-      <div className="text-xl font-bold text-slate-200">{value}</div>
-    </div>
-    <div className="p-3 bg-slate-700/30 rounded-xl">{icon}</div>
+const IndicatorRow = ({ label, value, valueClass }) => (
+  <div className="flex justify-between items-center py-2 border-b border-slate-100 last:border-0">
+    <span className="text-sm text-slate-600">{label}</span>
+    <span className={`text-sm ${valueClass}`}>{value}</span>
   </div>
 );
 
