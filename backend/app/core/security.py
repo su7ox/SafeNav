@@ -8,7 +8,8 @@ SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# --- CHANGE: Switched from 'bcrypt' to 'argon2' to fix compatibility errors ---
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

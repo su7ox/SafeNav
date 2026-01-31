@@ -2,27 +2,22 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   ShieldCheck, AlertTriangle, XOctagon, Loader2, 
-  Globe, Activity, History, Trash2, Moon, Sun, User, Lock, LogOut
+  Globe, Activity, History, LogOut, Moon, Sun, User, Lock 
 } from 'lucide-react';
 import './App.css';
 
-// --- CONFIG ---
 const API_URL = 'http://localhost:8000/api/v1';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('scan');
   const [recentScans, setRecentScans] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
-  
-  // Auth State
   const [token, setToken] = useState(localStorage.getItem('safenav_token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('safenav_history');
     if (saved) setRecentScans(JSON.parse(saved));
-    
     const savedTheme = localStorage.getItem('safenav_theme');
     if (savedTheme === 'dark') {
       setDarkMode(true);
@@ -42,22 +37,19 @@ const App = () => {
     }
   };
 
-  const handleLogin = (newToken, email) => {
+  const handleLogin = (newToken) => {
     setToken(newToken);
-    setUserEmail(email);
     localStorage.setItem('safenav_token', newToken);
     setShowAuthModal(false);
   };
 
   const handleLogout = () => {
     setToken(null);
-    setUserEmail('');
     localStorage.removeItem('safenav_token');
   };
 
   return (
     <div className="app-container">
-      {/* Navigation */}
       <nav className="nav-bar">
         <div className="nav-content">
           <div className="nav-logo">
@@ -68,7 +60,6 @@ const App = () => {
             <button className="icon-button" onClick={toggleDarkMode}>
               {darkMode ? <Sun /> : <Moon />}
             </button>
-            
             {token ? (
               <button className="icon-button" onClick={handleLogout} title="Logout">
                 <LogOut />
@@ -82,28 +73,15 @@ const App = () => {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="main-content">
-        {activeTab === 'scan' ? (
-          <ScannerView 
-            token={token} 
-            onScanComplete={(res) => {
-              // Simple history update logic
-            }} 
-            onRequestLogin={() => setShowAuthModal(true)}
-          />
-        ) : (
-          <div />
-        )}
+        <ScannerView 
+          token={token} 
+          onScanComplete={() => {}} 
+          onRequestLogin={() => setShowAuthModal(true)}
+        />
       </main>
 
-      {/* Auth Modal */}
-      {showAuthModal && (
-        <AuthModal 
-          onClose={() => setShowAuthModal(false)} 
-          onLogin={handleLogin} 
-        />
-      )}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} onLogin={handleLogin} />}
     </div>
   );
 };
@@ -120,15 +98,13 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
     setResult(null);
 
     try {
-      // Send Token if available
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      
       const response = await axios.post(`${API_URL}/scan`, { url }, config);
       setResult(response.data);
       onScanComplete(response.data);
     } catch (err) {
       console.error(err);
-      alert("Scan failed. Is backend running?");
+      alert("Scan failed. Ensure Backend is running.");
     }
     setLoading(false);
   };
@@ -166,14 +142,13 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
       {result && (
         <div className="result-container">
           <div className="result-card">
-            {/* Verdict Header */}
             <div className="result-header">
               <div className="result-info">
                  <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
                    <ShieldCheck />
                  </div>
                  <div className="verdict-details">
-                   <h2>{result.verdict}</h2>
+                   <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
                    <p className="target-url">Target: {result.url}</p>
                  </div>
               </div>
@@ -182,7 +157,6 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
               </div>
             </div>
 
-            {/* AI Insight - GATED */}
             <div className="ai-insight">
               <div className="ai-insight-header">
                 <Activity />
@@ -200,11 +174,69 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
               </div>
             </div>
 
-            {/* Deep Scan Button - GATED */}
-            <button 
-              className={`deep-scan-button ${!token ? 'locked' : ''}`} 
-              onClick={handleDeepScan}
-            >
+            <div className="details-grid">
+              {/* Threat Indicators */}
+              <div className="details-section">
+                <h3>Threat Indicators</h3>
+                <div className="details-list">
+                  <div className="detail-row">
+                    <span className="detail-label">Suspicious TLD:</span>
+                    <span className={`detail-value ${result.details.suspicious_tld ? 'danger' : 'safe'}`}>
+                      {result.details.suspicious_tld ? 'Detected' : 'Clean'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Typosquatting:</span>
+                    <span className={`detail-value ${result.details.typosquatting ? 'danger' : 'safe'}`}>
+                      {result.details.typosquatting ? 'Match Found' : 'None Detected'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Insecure Form:</span>
+                    <span className={`detail-value ${result.details.insecure_login ? 'danger' : 'safe'}`}>
+                      {result.details.insecure_login ? 'Detected' : 'Safe'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Redirect Hops:</span>
+                    <span className="detail-value">{result.details.hop_count}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Technical Footprint - EXPANDED */}
+              <div className="details-section">
+                <h3>Technical Footprint</h3>
+                <div className="details-list">
+                  <div className="detail-row">
+                    <span className="detail-label">Link Category:</span>
+                    <span className="detail-value">{result.details.link_category}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">SSL Issuer:</span>
+                    <span className="detail-value" title={result.details.ssl_issuer}>
+                      {result.details.ssl_issuer ? (result.details.ssl_issuer.length > 20 ? result.details.ssl_issuer.substring(0,20)+'...' : result.details.ssl_issuer) : 'Unknown'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Validation Type:</span>
+                    <span className="detail-value">{result.details.ssl_type || 'Unknown'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Cert Validity:</span>
+                    <span className="detail-value">{result.details.cert_age_days !== null ? `${result.details.cert_age_days} Days` : 'N/A'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Destination:</span>
+                    <span className="detail-value" title={result.details.final_destination}>
+                      {result.details.final_destination ? result.details.final_destination.substring(0,25)+'...' : 'Same'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button className={`deep-scan-button ${!token ? 'locked' : ''}`} onClick={handleDeepScan}>
               {!token && <Lock size={16} style={{marginRight: '8px', display:'inline'}} />}
               {token ? "Initialize Deep Scan Analysis" : "Login for Deep Scan Analysis"}
             </button>
@@ -215,7 +247,6 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
   );
 };
 
-// Simple Auth Modal Component
 const AuthModal = ({ onClose, onLogin }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
@@ -225,24 +256,20 @@ const AuthModal = ({ onClose, onLogin }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
     try {
       if (isRegister) {
         await axios.post(`${API_URL}/register`, { email, password });
-        // Auto switch to login after register
         setIsRegister(false);
         alert("Registered! Please login.");
       } else {
-        // Login needs form-data format for OAuth2
         const formData = new FormData();
         formData.append('username', email);
         formData.append('password', password);
-        
         const res = await axios.post(`${API_URL}/login`, formData);
-        onLogin(res.data.access_token, email);
+        onLogin(res.data.access_token);
       }
     } catch (err) {
-      setError(err.response?.data?.detail || "Authentication failed");
+      setError("Authentication failed. Check credentials.");
     }
   };
 
@@ -252,17 +279,9 @@ const AuthModal = ({ onClose, onLogin }) => {
         <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
         {error && <p className="error-text">{error}</p>}
         <form onSubmit={handleSubmit}>
-          <input 
-            type="email" placeholder="Email" required 
-            value={email} onChange={e => setEmail(e.target.value)}
-          />
-          <input 
-            type="password" placeholder="Password" required 
-            value={password} onChange={e => setPassword(e.target.value)}
-          />
-          <button type="submit" className="auth-submit-btn">
-            {isRegister ? 'Register' : 'Login'}
-          </button>
+          <input type="email" placeholder="Email" required value={email} onChange={e => setEmail(e.target.value)} />
+          <input type="password" placeholder="Password" required value={password} onChange={e => setPassword(e.target.value)} />
+          <button type="submit" className="auth-submit-btn">{isRegister ? 'Register' : 'Login'}</button>
         </form>
         <p className="auth-switch">
           {isRegister ? "Already have an account?" : "No account?"}

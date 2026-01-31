@@ -4,14 +4,13 @@ from pydantic import BaseModel, EmailStr
 from app.core.database import DB
 from app.core.security import verify_password, get_password_hash, create_access_token
 
-# --- CORRECT IMPORTS FOR YOUR SCANNING ENGINE ---
 from app.core.normalization import normalize_url
 from app.core.fingerprinting import identify_link_type
 from app.core.tracing import trace_redirects
 from app.core.ssl_check import inspect_ssl
 from app.core.reputation import check_domain_reputation
 from app.core.lexical import check_lexical_risk
-from app.core.ml_engine import predict_risk  # <--- THIS IS THE FIX
+from app.core.ml_engine import predict_risk 
 from app.core.content_scan import inspect_content
 from app.utils.scoring import calculate_fusion_score
 
@@ -73,80 +72,77 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @router.post("/scan")
 async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_user)):
-    """
-    Standard Scan:
-    - Guests: See Score + Verdict (Reasoning is masked).
-    - Logged In: See Score + Verdict + FULL AI Reasoning.
-    """
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
 
-    # 1. Normalization & Initial ID
+    # 1. Run All Analysis Modules
     normalized_url, hostname = normalize_url(request.url)
     fingerprint = identify_link_type(normalized_url, hostname)
-    
-    # 2. Network & Crypto Analysis
     trace = await trace_redirects(normalized_url)
     ssl_data = inspect_ssl(hostname)
     reputation = check_domain_reputation(normalized_url)
-    
-    # 3. Textual & Statistical Analysis
     lexical = check_lexical_risk(normalized_url, hostname)
-    
-    # 4. Content & ML Analysis
-    # content_scan uses HTML retrieved during redirect trace
     content_data = inspect_content(trace.get("html_content"), normalized_url)
     
-    # Run ML Prediction (Using the correct function)
+    # 2. ML Prediction
     ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
 
-    # 5. Risk Score Aggregation
+    # 3. Aggregate Warnings
     all_warnings = (
         fingerprint["tags"] + trace["warning_flags"] + 
         ssl_data["warning_flags"] + reputation["warning_flags"] + 
         lexical["warning_flags"] + content_data["warning_flags"]
     )
     
-    # Fusion Algorithm
     final_score = calculate_fusion_score(ml_result["ml_probability"], all_warnings)
-
-    # 6. Verdict Logic
     verdict = "Safe" if final_score <= 30 else "Caution" if final_score <= 69 else "High Risk"
 
+    # 4. Prepare Rich Details (According to Report Page 12-13)
+    # We explicitly verify flags here so they are visible to guests in the UI
+    has_suspicious_tld = any("TLD" in w for w in all_warnings)
+    has_typosquatting = any("Typosquatting" in w for w in all_warnings)
+    [cite_start]has_insecure_login = any("Insecure Login" in w for w in all_warnings) # [cite: 912]
+
+    # Determine Link Category (Shortener, IP, Standard)
+    link_category = "Standard URL"
+    [cite_start]if fingerprint["is_shortened"]: link_category = "Shortened URL" # [cite: 722]
+    [cite_start]elif fingerprint["is_ip_based"]: link_category = "IP-Based URL" # [cite: 1085]
+    [cite_start]elif fingerprint["is_download"]: link_category = "File Download" # [cite: 728]
+
     details = {
-        "ml_probability": ml_result["ml_probability"],
+        # Threat Indicators
+        "suspicious_tld": has_suspicious_tld,
+        "typosquatting": has_typosquatting,
+        "insecure_login": has_insecure_login,
         "hop_count": trace["hop_count"],
-        "cert_age": ssl_data["cert_age_days"]
+        
+        # Technical Footprint
+        "link_category": link_category,
+        "cert_age_days": ssl_data["cert_age_days"],
+        [cite_start]"ssl_issuer": ssl_data["issuer"],        # [cite: 156]
+        [cite_start]"ssl_type": ssl_data["validation_type"], # [cite: 154] (DV vs OV)
+        "final_destination": trace["final_url"]
     }
 
-    # LOGIC GATE: Hide reasoning if user is not logged in
-    if not user:
-        return {
-            "url": normalized_url,
-            "final_destination": trace["final_url"],
-            "risk_score": final_score,
-            "verdict": verdict,
-            "details": details,
-            "reasoning": ["🔒 Login to view AI Security Analysis"],
-            "is_guest": True
-        }
-    
-    # Return full data for logged-in users
-    return {
+    response = {
         "url": normalized_url,
-        "final_destination": trace["final_url"],
         "risk_score": final_score,
         "verdict": verdict,
         "details": details,
-        "reasoning": list(set(all_warnings)),
         "is_guest": False
     }
 
+    # Hide specific AI reasoning text for guests, but show the details above
+    if not user:
+        response["reasoning"] = ["🔒 Login to view AI Security Analysis"]
+        response["is_guest"] = True
+    else:
+        response["reasoning"] = list(set(all_warnings))
+
+    return response
+
 @router.post("/deep-scan")
 async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)):
-    """
-    Deep Scan: Strict access for logged-in users only.
-    """
     return {
         "status": "Deep Scan Initiated",
         "user": user["email"],
