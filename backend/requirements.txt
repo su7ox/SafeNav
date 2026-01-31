@@ -11,3 +11,9 @@ python-whois
 cryptography
 redis
 joblib
+
+motor           # MongoDB Driver
+python-jose[cryptography]  # JWT Tokens
+passlib[bcrypt] # Password Hashing
+python-multipart # Form data for login
+email-validator
