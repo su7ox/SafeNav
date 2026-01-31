@@ -58,15 +58,12 @@ const App = () => {
       {/* Top Navigation */}
       <nav className="nav-bar">
         <div className="nav-content">
-          {/* Logo */}
           <div className="nav-logo">
             <div className="logo-icon">
               <ShieldCheck />
             </div>
             <span className="logo-text">SafeNav</span>
           </div>
-          
-          {/* Right Icons */}
           <div className="nav-actions">
             <button className="icon-button" onClick={toggleDarkMode} title="Toggle dark mode">
               {darkMode ? <Sun /> : <Moon />}
@@ -97,6 +94,11 @@ const ScannerView = ({ onScanComplete }) => {
   const [error, setError] = useState('');
 
   const BACKEND_URL = 'http://localhost:8000';
+
+  // Helper to check reasoning list for keywords
+  const hasFlag = (keyword) => {
+    return result?.reasoning?.some(r => r.toLowerCase().includes(keyword.toLowerCase()));
+  };
 
   const handleScan = async (e) => {
     e.preventDefault();
@@ -132,7 +134,6 @@ const ScannerView = ({ onScanComplete }) => {
           <div className="search-icon">
             <Globe />
           </div>
-          
           <input 
             type="text" 
             value={url}
@@ -140,17 +141,13 @@ const ScannerView = ({ onScanComplete }) => {
             placeholder="Paste URL here (e.g., google.com)..." 
             className="search-input"
           />
-          
           <button 
             type="submit" 
             disabled={loading || !url}
             className="search-button"
           >
             {loading ? (
-              <>
-                <Loader2 className="spinner" />
-                Scanning...
-              </>
+              <><Loader2 className="spinner" /> Scanning...</>
             ) : (
               'ANALYZE'
             )}
@@ -159,9 +156,7 @@ const ScannerView = ({ onScanComplete }) => {
         
         {error && (
           <div className="error-message">
-            <div className="error-icon">
-              <AlertTriangle />
-            </div>
+            <div className="error-icon"><AlertTriangle /></div>
             <div className="error-content">
               <p className="error-title">Connection Error</p>
               <p className="error-text">{error}</p>
@@ -182,13 +177,7 @@ const ScannerView = ({ onScanComplete }) => {
                   result.risk_score > 30 ? 'warning' :
                   'safe'
                 }`}>
-                  {result.risk_score > 70 ? (
-                    <XOctagon />
-                  ) : result.risk_score > 30 ? (
-                    <AlertTriangle />
-                  ) : (
-                    <ShieldCheck />
-                  )}
+                  {result.risk_score > 70 ? <XOctagon /> : result.risk_score > 30 ? <AlertTriangle /> : <ShieldCheck />}
                 </div>
                 
                 <div className="verdict-details">
@@ -210,9 +199,7 @@ const ScannerView = ({ onScanComplete }) => {
                 <div className="risk-score-number">
                   {result.risk_score}<span className="score-max">/100</span>
                 </div>
-                <div className="risk-score-label">
-                  RISK SCORE
-                </div>
+                <div className="risk-score-label">RISK SCORE</div>
               </div>
             </div>
 
@@ -226,12 +213,10 @@ const ScannerView = ({ onScanComplete }) => {
               <div className="ai-insight-content">
                 {result.reasoning && result.reasoning.length > 0 ? (
                   result.reasoning.map((r, i) => (
-                    <p key={i} className="reasoning-item">{r}</p>
+                    <p key={i} className="reasoning-item">• {r}</p>
                   ))
                 ) : (
-                  <p>
-                    Premium features will be found by your fens hiddle messable to get certain with premium features as the linkay. <a href="#">Learn more.</a>
-                  </p>
+                  <p>No specific threats detected. The URL appears to conform to standard safety patterns.</p>
                 )}
               </div>
             </div>
@@ -243,24 +228,20 @@ const ScannerView = ({ onScanComplete }) => {
                 <h3>Threat Indicators</h3>
                 <div className="details-list">
                   <div className="detail-row">
-                    <span className="detail-label">Spam/Abuse TLD:</span>
-                    <span className={`detail-value ${
-                      result.risk_score > 50 ? 'danger' : 'safe'
-                    }`}>
-                      {result.risk_score > 50 ? 'High' : 'Low'}
+                    <span className="detail-label">Suspicious TLD:</span>
+                    <span className={`detail-value ${hasFlag('TLD') ? 'danger' : 'safe'}`}>
+                      {hasFlag('TLD') ? 'Detected' : 'Clean'}
                     </span>
                   </div>
                   <div className="detail-row">
-                    <span className="detail-label">Typosquatting Intent:</span>
-                    <span className="detail-value">None Detected</span>
+                    <span className="detail-label">Typosquatting:</span>
+                    <span className={`detail-value ${hasFlag('Typosquatting') ? 'danger' : 'safe'}`}>
+                      {hasFlag('Typosquatting') ? 'Possible Match' : 'None Detected'}
+                    </span>
                   </div>
                   <div className="detail-row">
-                    <span className="detail-label">SSL/TLS Cance TLD:</span>
-                    <span className={`detail-value ${
-                      result.risk_score > 50 ? 'danger' : 'safe'
-                    }`}>
-                      {result.risk_score > 50 ? 'High' : 'Low'}
-                    </span>
+                    <span className="detail-label">Redirect Hops:</span>
+                    <span className="detail-value">{result.details?.hop_count || 0}</span>
                   </div>
                 </div>
               </div>
@@ -270,21 +251,17 @@ const ScannerView = ({ onScanComplete }) => {
                 <h3>Technical Footprint</h3>
                 <div className="details-list">
                   <div className="detail-row">
-                    <span className="detail-label">SSL/TLS Issuer:</span>
+                    <span className="detail-label">Cert Validity (Days):</span>
                     <span className="detail-value">
-                      {result.details?.cert_age ? 'Google Trust Services' : 'Unknown'}
+                      {result.details?.cert_age !== undefined ? `${result.details.cert_age}` : 'Unknown'}
                     </span>
                   </div>
                   <div className="detail-row">
-                    <span className="detail-label">Domain Age:</span>
-                    <span className="detail-value">
-                      {result.details?.cert_age ? `${result.details.cert_age}+ Days` : '9000+ Days'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Domain Age (nge):</span>
-                    <span className="detail-value">
-                      {result.details?.cert_age ? `${result.details.cert_age}+ Days` : '9000+ Days'}
+                    <span className="detail-label">Final Destination:</span>
+                    <span className="detail-value" title={result.final_destination}>
+                      {result.final_destination ? 
+                        (result.final_destination.length > 25 ? result.final_destination.substring(0,25)+'...' : result.final_destination) 
+                        : 'Same as Input'}
                     </span>
                   </div>
                 </div>
@@ -320,9 +297,7 @@ const HistoryView = ({ scans, onClear }) => (
     <div className="history-table-container">
       {scans.length === 0 ? (
         <div className="empty-history">
-          <div className="empty-history-icon">
-            <History />
-          </div>
+          <div className="empty-history-icon"><History /></div>
           <h3>No scan history</h3>
           <p>Start scanning URLs to build your history</p>
         </div>
@@ -339,9 +314,7 @@ const HistoryView = ({ scans, onClear }) => (
           <tbody>
             {scans.map((scan) => (
               <tr key={scan.id}>
-                <td>
-                  <span className="url-cell">{scan.url}</span>
-                </td>
+                <td><span className="url-cell">{scan.url}</span></td>
                 <td className="date-cell">{scan.date}</td>
                 <td>
                   <span className={`verdict-badge ${
