@@ -106,7 +106,6 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     dom_age = reputation.get("domain_age_days", 0)
     dom_status = "New (< 30 Days)" if dom_age < 30 else "Established"
     is_sus_tld = reputation.get("is_suspicious_tld", False)
-    # Mock WHOIS privacy check (usually detected by 'Redacted' in registrant name)
     whois_privacy = True 
 
     # Category 4: Link Structure
@@ -115,11 +114,20 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     elif fingerprint["is_ip_based"]: link_cat = "IP Address"
     elif fingerprint["is_download"]: link_cat = "File/App"
     
+    # --- FIX: SAFE TAG EXTRACTION ---
+    tags_list = fingerprint.get("tags", [])
+    service_type = tags_list[0].title() if tags_list else "General Website"
+    
+    short_provider = fingerprint.get("provider")
+    if not short_provider:
+        short_provider = "None"
+    else:
+        short_provider = short_provider.title()
+
     is_obfuscated = "%" in request.url or "0x" in request.url
 
     # Category 5: Redirects
     hops = trace.get("hop_count", 0)
-    # Check if start domain != end domain
     start_domain = urlparse(normalized_url).netloc
     end_domain = urlparse(trace.get("final_url", "")).netloc
     cross_domain = start_domain != end_domain
@@ -146,14 +154,14 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
             "domain_age": f"{dom_age} days",
             "domain_status": dom_status,
             "suspicious_tld": "Yes" if is_sus_tld else "No",
-            "registrar_trust": "Normal", # Placeholder as we don't have a registrar DB yet
+            "registrar_trust": "Normal", 
             "whois_privacy": "Yes" if whois_privacy else "No"
         },
         "link_structure": {
             "platform": fingerprint.get("platform", "Unknown").title(),
-            "service_type": fingerprint.get("tags", ["Unknown"])[0].title(),
+            "service_type": service_type,
             "link_category": link_cat,
-            "short_provider": fingerprint.get("provider", "None").title(),
+            "short_provider": short_provider,
             "original_domain": start_domain,
             "is_ip_based": "Yes" if fingerprint["is_ip_based"] else "No",
             "obfuscation": "Yes" if is_obfuscated else "No"
@@ -162,7 +170,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
             "hop_count": hops,
             "cross_domain": "Yes" if cross_domain else "No",
             "final_destination": trace.get("final_url", normalized_url),
-            "redirect_loop": "No" # Simplified
+            "redirect_loop": "No"
         },
         "content_safety": {
             "login_detected": "Yes" if content_data.get("has_login_form") else "No",
@@ -185,7 +193,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         "url": normalized_url,
         "risk_score": final_score,
         "verdict": verdict,
-        "details": details, # The new 6-section structure
+        "details": details,
         "is_guest": False
     }
 

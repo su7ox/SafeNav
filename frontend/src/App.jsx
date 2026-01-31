@@ -126,23 +126,31 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
       {result && (
         <div className="result-container">
-          {/* VERDICT HEADER */}
+          
+          {/* --- UPDATED VERDICT HEADER --- */}
           <div className="result-card main-verdict">
              <div className="result-header">
-                <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
-                   {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
+                
+                {/* LEFT SIDE: Icon + Verdict + URL */}
+                <div className="header-left">
+                    <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
+                       {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
+                    </div>
+                    <div className="verdict-text-group">
+                       <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
+                       <p className="target-url">Target: {result.url}</p>
+                    </div>
                 </div>
-                <div>
-                   <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
-                   <p className="target-url">Target: {result.url}</p>
+
+                {/* RIGHT SIDE: Risk Score */}
+                <div className="risk-score-display">
+                    <div className="risk-score-number">{result.risk_score}</div>
+                    <div className="risk-score-label">RISK SCORE</div>
                 </div>
-             </div>
-             <div className="risk-score-display">
-                <div className="risk-score-number">{result.risk_score}</div>
-                <div className="risk-score-label">RISK SCORE</div>
+
              </div>
           </div>
-
+          <br />
           {/* AI INSIGHT (Middle) */}
           <div className="ai-insight">
              <div className="ai-insight-header"><Activity /><h3>AI Security Insight</h3></div>

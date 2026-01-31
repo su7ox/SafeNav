@@ -269,3 +269,48 @@ body {
 .detail-value.danger {
   color: var(--danger-text);
 }
+/* --- RESULT HEADER LAYOUT --- */
+.result-header {
+  display: flex;
+  justify-content: space-between; /* Pushes Left group to left, Right group to right */
+  align-items: center;            /* Centers them vertically */
+  width: 100%;
+  padding-bottom: 0;              /* Remove bottom padding if it exists */
+  border-bottom: none;            /* Remove border if it exists */
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem; /* Space between the Green Icon and the Text */
+}
+
+.verdict-text-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* Aligns text to the left */
+}
+
+.verdict-text-group h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.target-url {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Adds "..." if URL is too long */
+}
+
+/* Ensure the Risk Score stays to the right */
+.risk-score-display {
+  text-align: center;
+  min-width: 100px;
+}
