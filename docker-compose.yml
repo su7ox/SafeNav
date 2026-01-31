@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Database
+  safenav_db:
+    image: mongo:latest
+    container_name: safenav_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  # 2. Python Backend
+  backend:
+    build: ./backend
+    container_name: safenav_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URL=mongodb://safenav_db:27017
+      - SECRET_KEY=CHANGE_THIS_TO_A_SUPER_SECRET_KEY
+    depends_on:
+      - safenav_db
+    volumes:
+      - ./backend:/app  # Live reload for development
+
+  # 3. React Frontend
+  frontend:
+    build: ./frontend
+    container_name: safenav_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Avoid overwriting node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+volumes:
+  mongodb_data:
