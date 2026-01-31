@@ -2,22 +2,18 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   ShieldCheck, AlertTriangle, XOctagon, Loader2, 
-  Globe, Activity, History, LogOut, Moon, Sun, User, Lock 
+  Globe, Activity, Lock, Sun, Moon, LogOut, CheckCircle, XCircle 
 } from 'lucide-react';
 import './App.css';
 
 const API_URL = 'http://localhost:8000/api/v1';
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('scan');
-  const [recentScans, setRecentScans] = useState([]);
-  const [darkMode, setDarkMode] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('safenav_token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('safenav_history');
-    if (saved) setRecentScans(JSON.parse(saved));
     const savedTheme = localStorage.getItem('safenav_theme');
     if (savedTheme === 'dark') {
       setDarkMode(true);
@@ -52,33 +48,20 @@ const App = () => {
     <div className="app-container">
       <nav className="nav-bar">
         <div className="nav-content">
-          <div className="nav-logo">
-            <div className="logo-icon"><ShieldCheck /></div>
-            <span className="logo-text">SafeNav</span>
-          </div>
+          <div className="nav-logo"><ShieldCheck /><span className="logo-text">SafeNav</span></div>
           <div className="nav-actions">
-            <button className="icon-button" onClick={toggleDarkMode}>
-              {darkMode ? <Sun /> : <Moon />}
-            </button>
+            <button className="icon-button" onClick={toggleDarkMode}>{darkMode ? <Sun /> : <Moon />}</button>
             {token ? (
-              <button className="icon-button" onClick={handleLogout} title="Logout">
-                <LogOut />
-              </button>
+              <button className="icon-button" onClick={handleLogout}><LogOut /></button>
             ) : (
-              <button className="login-btn-nav" onClick={() => setShowAuthModal(true)}>
-                Login
-              </button>
+              <button className="login-btn-nav" onClick={() => setShowAuthModal(true)}>Login</button>
             )}
           </div>
         </div>
       </nav>
 
       <main className="main-content">
-        <ScannerView 
-          token={token} 
-          onScanComplete={() => {}} 
-          onRequestLogin={() => setShowAuthModal(true)}
-        />
+        <ScannerView token={token} onRequestLogin={() => setShowAuthModal(true)} />
       </main>
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} onLogin={handleLogin} />}
@@ -86,7 +69,27 @@ const App = () => {
   );
 };
 
-const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
+// --- RESULT CARD COMPONENT ---
+const DetailCard = ({ title, icon, data }) => (
+  <div className="detail-card">
+    <div className="detail-header">
+      <span className="detail-icon">{icon}</span>
+      <h3>{title}</h3>
+    </div>
+    <div className="detail-content">
+      {Object.entries(data).map(([key, value]) => (
+        <div key={key} className="detail-row">
+          <span className="detail-label">{key.replace(/_/g, ' ')}:</span>
+          <span className={`detail-value ${value === 'Yes' || value === 'Unsafe' || value === 'Expired' ? 'danger' : ''}`}>
+            {value}
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ScannerView = ({ token, onRequestLogin }) => {
   const [url, setUrl] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -101,38 +104,20 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       const response = await axios.post(`${API_URL}/scan`, { url }, config);
       setResult(response.data);
-      onScanComplete(response.data);
     } catch (err) {
-      console.error(err);
-      alert("Scan failed. Ensure Backend is running.");
+      alert("Scan failed. Ensure backend is running.");
     }
     setLoading(false);
   };
 
-  const handleDeepScan = async () => {
-    if (!token) {
-      onRequestLogin();
-      return;
-    }
-    alert("Deep Scan Initiated (Demo)");
-  };
-
   return (
     <div>
-      <div className="hero-section">
-        <h1 className="hero-title">Scan links. Reveal hidden risks.</h1>
-      </div>
-
+      <div className="hero-section"><h1 className="hero-title">Scan links. Reveal hidden risks.</h1></div>
+      
       <div className="search-container">
         <form onSubmit={handleScan} className="search-form">
-          <div className="search-icon"><Globe /></div>
-          <input 
-            type="text" 
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste URL here..." 
-            className="search-input"
-          />
+          <Globe className="search-icon" />
+          <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste URL here..." className="search-input" />
           <button type="submit" disabled={loading} className="search-button">
             {loading ? <Loader2 className="spinner" /> : 'ANALYZE'}
           </button>
@@ -141,106 +126,49 @@ const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
 
       {result && (
         <div className="result-container">
-          <div className="result-card">
-            <div className="result-header">
-              <div className="result-info">
-                 <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
-                   <ShieldCheck />
-                 </div>
-                 <div className="verdict-details">
+          {/* VERDICT HEADER */}
+          <div className="result-card main-verdict">
+             <div className="result-header">
+                <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
+                   {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
+                </div>
+                <div>
                    <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
                    <p className="target-url">Target: {result.url}</p>
-                 </div>
-              </div>
-              <div className="risk-score-display">
+                </div>
+             </div>
+             <div className="risk-score-display">
                 <div className="risk-score-number">{result.risk_score}</div>
-              </div>
-            </div>
+                <div className="risk-score-label">RISK SCORE</div>
+             </div>
+          </div>
 
-            <div className="ai-insight">
-              <div className="ai-insight-header">
-                <Activity />
-                <h3>AI Security Insight</h3>
-              </div>
-              <div className="ai-insight-content">
+          {/* AI INSIGHT (Middle) */}
+          <div className="ai-insight">
+             <div className="ai-insight-header"><Activity /><h3>AI Security Insight</h3></div>
+             <div className="ai-insight-content">
                 {result.is_guest ? (
-                  <div className="locked-feature">
-                    <Lock size={16} />
-                    <span>Advanced AI Analysis is locked. <button className="text-link" onClick={onRequestLogin}>Login</button> to view details.</span>
-                  </div>
+                  <div className="locked-feature"><Lock size={16} /> Login to view AI Analysis</div>
                 ) : (
                   result.reasoning.map((r, i) => <p key={i}>• {r}</p>)
                 )}
-              </div>
-            </div>
-
-            <div className="details-grid">
-              {/* Threat Indicators */}
-              <div className="details-section">
-                <h3>Threat Indicators</h3>
-                <div className="details-list">
-                  <div className="detail-row">
-                    <span className="detail-label">Suspicious TLD:</span>
-                    <span className={`detail-value ${result.details.suspicious_tld ? 'danger' : 'safe'}`}>
-                      {result.details.suspicious_tld ? 'Detected' : 'Clean'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Typosquatting:</span>
-                    <span className={`detail-value ${result.details.typosquatting ? 'danger' : 'safe'}`}>
-                      {result.details.typosquatting ? 'Match Found' : 'None Detected'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Insecure Form:</span>
-                    <span className={`detail-value ${result.details.insecure_login ? 'danger' : 'safe'}`}>
-                      {result.details.insecure_login ? 'Detected' : 'Safe'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Redirect Hops:</span>
-                    <span className="detail-value">{result.details.hop_count}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Technical Footprint - EXPANDED */}
-              <div className="details-section">
-                <h3>Technical Footprint</h3>
-                <div className="details-list">
-                  <div className="detail-row">
-                    <span className="detail-label">Link Category:</span>
-                    <span className="detail-value">{result.details.link_category}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">SSL Issuer:</span>
-                    <span className="detail-value" title={result.details.ssl_issuer}>
-                      {result.details.ssl_issuer ? (result.details.ssl_issuer.length > 20 ? result.details.ssl_issuer.substring(0,20)+'...' : result.details.ssl_issuer) : 'Unknown'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Validation Type:</span>
-                    <span className="detail-value">{result.details.ssl_type || 'Unknown'}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Cert Validity:</span>
-                    <span className="detail-value">{result.details.cert_age_days !== null ? `${result.details.cert_age_days} Days` : 'N/A'}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Destination:</span>
-                    <span className="detail-value" title={result.details.final_destination}>
-                      {result.details.final_destination ? result.details.final_destination.substring(0,25)+'...' : 'Same'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button className={`deep-scan-button ${!token ? 'locked' : ''}`} onClick={handleDeepScan}>
-              {!token && <Lock size={16} style={{marginRight: '8px', display:'inline'}} />}
-              {token ? "Initialize Deep Scan Analysis" : "Login for Deep Scan Analysis"}
-            </button>
+             </div>
           </div>
+
+          {/* 6-SECTION GRID */}
+          <div className="grid-6-layout">
+            <DetailCard title="SSL & Security" icon="🔐" data={result.details.ssl_security} />
+            <DetailCard title="Phishing Checks" icon="🎣" data={result.details.phishing_checks} />
+            <DetailCard title="Domain Reputation" icon="🌐" data={result.details.domain_reputation} />
+            <DetailCard title="Link Structure" icon="🔗" data={result.details.link_structure} />
+            <DetailCard title="Redirect Analysis" icon="🔄" data={result.details.redirect_analysis} />
+            <DetailCard title="Content Safety" icon="🧾" data={result.details.content_safety} />
+          </div>
+          
+          {/* DEEP SCAN BUTTON */}
+          <button className={`deep-scan-button ${!token ? 'locked' : ''}`} onClick={() => token ? alert('Scanning...') : onRequestLogin()}>
+             {token ? "Initialize Deep Scan" : "Login for Deep Scan"}
+          </button>
         </div>
       )}
     </div>
@@ -251,43 +179,32 @@ const AuthModal = ({ onClose, onLogin }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     try {
       if (isRegister) {
         await axios.post(`${API_URL}/register`, { email, password });
-        setIsRegister(false);
-        alert("Registered! Please login.");
+        alert("Registered!"); setIsRegister(false);
       } else {
-        const formData = new FormData();
-        formData.append('username', email);
-        formData.append('password', password);
-        const res = await axios.post(`${API_URL}/login`, formData);
+        const fd = new FormData(); fd.append('username', email); fd.append('password', password);
+        const res = await axios.post(`${API_URL}/login`, fd);
         onLogin(res.data.access_token);
       }
-    } catch (err) {
-      setError("Authentication failed. Check credentials.");
-    }
+    } catch { alert("Auth Failed"); }
   };
 
   return (
     <div className="modal-overlay">
       <div className="modal-content">
-        <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
-        {error && <p className="error-text">{error}</p>}
+        <h2>{isRegister ? 'Register' : 'Login'}</h2>
         <form onSubmit={handleSubmit}>
           <input type="email" placeholder="Email" required value={email} onChange={e => setEmail(e.target.value)} />
           <input type="password" placeholder="Password" required value={password} onChange={e => setPassword(e.target.value)} />
-          <button type="submit" className="auth-submit-btn">{isRegister ? 'Register' : 'Login'}</button>
+          <button type="submit" className="auth-submit-btn">Submit</button>
         </form>
-        <p className="auth-switch">
-          {isRegister ? "Already have an account?" : "No account?"}
-          <span onClick={() => setIsRegister(!isRegister)}>
-            {isRegister ? " Login" : " Register"}
-          </span>
+        <p className="auth-switch" onClick={() => setIsRegister(!isRegister)}>
+          {isRegister ? "Have account? Login" : "No account? Register"}
         </p>
         <button className="close-btn" onClick={onClose}>Close</button>
       </div>

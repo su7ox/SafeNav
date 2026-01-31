@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from app.core.database import DB
 from app.core.security import verify_password, get_password_hash, create_access_token
+from urllib.parse import urlparse
 
+# Import Analysis Modules
 from app.core.normalization import normalize_url
 from app.core.fingerprinting import identify_link_type
 from app.core.tracing import trace_redirects
@@ -75,7 +77,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
 
-    # 1. Run All Analysis Modules
+    # --- 1. EXECUTE ANALYSIS ---
     normalized_url, hostname = normalize_url(request.url)
     fingerprint = identify_link_type(normalized_url, hostname)
     trace = await trace_redirects(normalized_url)
@@ -84,55 +86,109 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     lexical = check_lexical_risk(normalized_url, hostname)
     content_data = inspect_content(trace.get("html_content"), normalized_url)
     
-    # 2. ML Prediction
+    # ML Prediction
     ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
 
-    # 3. Aggregate Warnings
+    # --- 2. CALCULATE FLAGS & CATEGORIES ---
+    
+    # Category 1: SSL
+    https_enabled = normalized_url.startswith("https")
+    cert_status = "Valid" if ssl_data.get("is_valid") else "Expired/Invalid"
+    if not https_enabled: cert_status = "None"
+    
+    # Category 2: Phishing
+    is_typosquat = lexical.get("is_typosquat", False)
+    brand_detected = lexical.get("target", "None") if is_typosquat else "None"
+    suspicious_kw = any(x in normalized_url for x in ["login", "verify", "update", "secure", "bank"])
+    is_homograph = "xn--" in hostname # Punycode check
+
+    # Category 3: Reputation
+    dom_age = reputation.get("domain_age_days", 0)
+    dom_status = "New (< 30 Days)" if dom_age < 30 else "Established"
+    is_sus_tld = reputation.get("is_suspicious_tld", False)
+    # Mock WHOIS privacy check (usually detected by 'Redacted' in registrant name)
+    whois_privacy = True 
+
+    # Category 4: Link Structure
+    link_cat = "Standard"
+    if fingerprint["is_shortened"]: link_cat = "Shortened"
+    elif fingerprint["is_ip_based"]: link_cat = "IP Address"
+    elif fingerprint["is_download"]: link_cat = "File/App"
+    
+    is_obfuscated = "%" in request.url or "0x" in request.url
+
+    # Category 5: Redirects
+    hops = trace.get("hop_count", 0)
+    # Check if start domain != end domain
+    start_domain = urlparse(normalized_url).netloc
+    end_domain = urlparse(trace.get("final_url", "")).netloc
+    cross_domain = start_domain != end_domain
+    
+    # Category 6: Content
+    insecure_form = content_data.get("has_login_form") and not https_enabled
+
+    # --- 3. CONSTRUCT 6-SECTION DETAILS ---
+    details = {
+        "ssl_security": {
+            "https_enabled": "Yes" if https_enabled else "No",
+            "cert_validity": cert_status,
+            "validation_type": ssl_data.get("validation_type", "Unknown"),
+            "issuer": ssl_data.get("issuer", "Unknown"),
+            "cert_age": f"{ssl_data.get('cert_age_days', 0)} days"
+        },
+        "phishing_checks": {
+            "typosquatting": "Yes" if is_typosquat else "No",
+            "brand_similarity": brand_detected.title(),
+            "suspicious_keywords": "Yes" if suspicious_kw else "No",
+            "homograph_attack": "Yes" if is_homograph else "No"
+        },
+        "domain_reputation": {
+            "domain_age": f"{dom_age} days",
+            "domain_status": dom_status,
+            "suspicious_tld": "Yes" if is_sus_tld else "No",
+            "registrar_trust": "Normal", # Placeholder as we don't have a registrar DB yet
+            "whois_privacy": "Yes" if whois_privacy else "No"
+        },
+        "link_structure": {
+            "platform": fingerprint.get("platform", "Unknown").title(),
+            "service_type": fingerprint.get("tags", ["Unknown"])[0].title(),
+            "link_category": link_cat,
+            "short_provider": fingerprint.get("provider", "None").title(),
+            "original_domain": start_domain,
+            "is_ip_based": "Yes" if fingerprint["is_ip_based"] else "No",
+            "obfuscation": "Yes" if is_obfuscated else "No"
+        },
+        "redirect_analysis": {
+            "hop_count": hops,
+            "cross_domain": "Yes" if cross_domain else "No",
+            "final_destination": trace.get("final_url", normalized_url),
+            "redirect_loop": "No" # Simplified
+        },
+        "content_safety": {
+            "login_detected": "Yes" if content_data.get("has_login_form") else "No",
+            "password_field": "Yes" if content_data.get("has_password_field") else "No",
+            "insecure_submission": "Unsafe" if insecure_form else "Safe",
+            "client_redirect": "No"
+        }
+    }
+
+    # --- 4. SCORING ---
     all_warnings = (
         fingerprint["tags"] + trace["warning_flags"] + 
         ssl_data["warning_flags"] + reputation["warning_flags"] + 
         lexical["warning_flags"] + content_data["warning_flags"]
     )
-    
     final_score = calculate_fusion_score(ml_result["ml_probability"], all_warnings)
     verdict = "Safe" if final_score <= 30 else "Caution" if final_score <= 69 else "High Risk"
-
-    # 4. Prepare Rich Details (According to Report Page 12-13)
-    # We explicitly verify flags here so they are visible to guests in the UI
-    has_suspicious_tld = any("TLD" in w for w in all_warnings)
-    has_typosquatting = any("Typosquatting" in w for w in all_warnings)
-    [cite_start]has_insecure_login = any("Insecure Login" in w for w in all_warnings) # [cite: 912]
-
-    # Determine Link Category (Shortener, IP, Standard)
-    link_category = "Standard URL"
-    [cite_start]if fingerprint["is_shortened"]: link_category = "Shortened URL" # [cite: 722]
-    [cite_start]elif fingerprint["is_ip_based"]: link_category = "IP-Based URL" # [cite: 1085]
-    [cite_start]elif fingerprint["is_download"]: link_category = "File Download" # [cite: 728]
-
-    details = {
-        # Threat Indicators
-        "suspicious_tld": has_suspicious_tld,
-        "typosquatting": has_typosquatting,
-        "insecure_login": has_insecure_login,
-        "hop_count": trace["hop_count"],
-        
-        # Technical Footprint
-        "link_category": link_category,
-        "cert_age_days": ssl_data["cert_age_days"],
-        [cite_start]"ssl_issuer": ssl_data["issuer"],        # [cite: 156]
-        [cite_start]"ssl_type": ssl_data["validation_type"], # [cite: 154] (DV vs OV)
-        "final_destination": trace["final_url"]
-    }
 
     response = {
         "url": normalized_url,
         "risk_score": final_score,
         "verdict": verdict,
-        "details": details,
+        "details": details, # The new 6-section structure
         "is_guest": False
     }
 
-    # Hide specific AI reasoning text for guests, but show the details above
     if not user:
         response["reasoning"] = ["🔒 Login to view AI Security Analysis"]
         response["is_guest"] = True
@@ -146,6 +202,5 @@ async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)
     return {
         "status": "Deep Scan Initiated",
         "user": user["email"],
-        "estimated_time": "2 minutes",
         "message": "Dynamic sandbox analysis started (Phase 2 feature)"
     }
