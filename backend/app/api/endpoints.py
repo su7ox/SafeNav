@@ -100,7 +100,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     is_typosquat = lexical.get("is_typosquat", False)
     brand_detected = lexical.get("target", "None") if is_typosquat else "None"
     suspicious_kw = any(x in normalized_url for x in ["login", "verify", "update", "secure", "bank"])
-    is_homograph = "xn--" in hostname # Punycode check
+    is_homograph = "xn--" in hostname 
 
     # Category 3: Reputation
     dom_age = reputation.get("domain_age_days", 0)
@@ -114,15 +114,12 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     elif fingerprint["is_ip_based"]: link_cat = "IP Address"
     elif fingerprint["is_download"]: link_cat = "File/App"
     
-    # --- FIX: SAFE TAG EXTRACTION ---
-    tags_list = fingerprint.get("tags", [])
-    service_type = tags_list[0].title() if tags_list else "General Website"
+    # --- BUG FIX HERE: CHECK IF LIST IS EMPTY ---
+    tags = fingerprint.get("tags", [])
+    service_type = tags[0].title() if tags else "General Website"
     
     short_provider = fingerprint.get("provider")
-    if not short_provider:
-        short_provider = "None"
-    else:
-        short_provider = short_provider.title()
+    short_provider = short_provider.title() if short_provider else "None"
 
     is_obfuscated = "%" in request.url or "0x" in request.url
 
@@ -135,7 +132,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     # Category 6: Content
     insecure_form = content_data.get("has_login_form") and not https_enabled
 
-    # --- 3. CONSTRUCT 6-SECTION DETAILS ---
+    # --- 3. CONSTRUCT DETAILS ---
     details = {
         "ssl_security": {
             "https_enabled": "Yes" if https_enabled else "No",

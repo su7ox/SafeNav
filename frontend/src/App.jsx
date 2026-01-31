@@ -128,28 +128,29 @@ const ScannerView = ({ token, onRequestLogin }) => {
         <div className="result-container">
           
           {/* --- UPDATED VERDICT HEADER --- */}
-          <div className="result-card main-verdict">
-             <div className="result-header">
-                
-                {/* LEFT SIDE: Icon + Verdict + URL */}
-                <div className="header-left">
-                    <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
-                       {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
-                    </div>
-                    <div className="verdict-text-group">
-                       <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
-                       <p className="target-url">Target: {result.url}</p>
-                    </div>
-                </div>
-
-                {/* RIGHT SIDE: Risk Score */}
-                <div className="risk-score-display">
-                    <div className="risk-score-number">{result.risk_score}</div>
-                    <div className="risk-score-label">RISK SCORE</div>
-                </div>
-
-             </div>
+         {/* Inside ScannerView component */}
+<div className="result-card main-verdict">
+   <div className="result-header">
+      
+      {/* LEFT SIDE GROUP */}
+      <div className="header-left">
+          <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
+             {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
           </div>
+          <div className="verdict-text-group">
+             <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
+             <p className="target-url">Target: {result.url}</p>
+          </div>
+      </div>
+
+      {/* RIGHT SIDE GROUP */}
+      <div className="risk-score-display">
+          <div className="risk-score-number">{result.risk_score}</div>
+          <div className="risk-score-label">RISK SCORE</div>
+      </div>
+
+   </div>
+</div>
           <br />
           {/* AI INSIGHT (Middle) */}
           <div className="ai-insight">
