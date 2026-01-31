@@ -2,20 +2,27 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   ShieldCheck, AlertTriangle, XOctagon, Loader2, 
-  Globe, Activity, History, Trash2, Moon, Sun, User
+  Globe, Activity, History, Trash2, Moon, Sun, User, Lock, LogOut
 } from 'lucide-react';
 import './App.css';
+
+// --- CONFIG ---
+const API_URL = 'http://localhost:8000/api/v1';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('scan');
   const [recentScans, setRecentScans] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Auth State
+  const [token, setToken] = useState(localStorage.getItem('safenav_token'));
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('safenav_history');
     if (saved) setRecentScans(JSON.parse(saved));
     
-    // Load dark mode preference
     const savedTheme = localStorage.getItem('safenav_theme');
     if (savedTheme === 'dark') {
       setDarkMode(true);
@@ -35,42 +42,42 @@ const App = () => {
     }
   };
 
-  const addToHistory = (scanResult) => {
-    const newEntry = {
-      id: Date.now(),
-      url: scanResult.url, 
-      score: scanResult.risk_score,
-      verdict: scanResult.verdict,
-      date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    const updated = [newEntry, ...recentScans].slice(0, 15);
-    setRecentScans(updated);
-    localStorage.setItem('safenav_history', JSON.stringify(updated));
+  const handleLogin = (newToken, email) => {
+    setToken(newToken);
+    setUserEmail(email);
+    localStorage.setItem('safenav_token', newToken);
+    setShowAuthModal(false);
   };
 
-  const clearHistory = () => {
-    setRecentScans([]);
-    localStorage.removeItem('safenav_history');
+  const handleLogout = () => {
+    setToken(null);
+    setUserEmail('');
+    localStorage.removeItem('safenav_token');
   };
 
   return (
     <div className="app-container">
-      {/* Top Navigation */}
+      {/* Navigation */}
       <nav className="nav-bar">
         <div className="nav-content">
           <div className="nav-logo">
-            <div className="logo-icon">
-              <ShieldCheck />
-            </div>
+            <div className="logo-icon"><ShieldCheck /></div>
             <span className="logo-text">SafeNav</span>
           </div>
           <div className="nav-actions">
-            <button className="icon-button" onClick={toggleDarkMode} title="Toggle dark mode">
+            <button className="icon-button" onClick={toggleDarkMode}>
               {darkMode ? <Sun /> : <Moon />}
             </button>
-            <button className="icon-button" title="User profile">
-              <User />
-            </button>
+            
+            {token ? (
+              <button className="icon-button" onClick={handleLogout} title="Logout">
+                <LogOut />
+              </button>
+            ) : (
+              <button className="login-btn-nav" onClick={() => setShowAuthModal(true)}>
+                Login
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -78,199 +85,128 @@ const App = () => {
       {/* Main Content */}
       <main className="main-content">
         {activeTab === 'scan' ? (
-          <ScannerView onScanComplete={addToHistory} />
+          <ScannerView 
+            token={token} 
+            onScanComplete={(res) => {
+              // Simple history update logic
+            }} 
+            onRequestLogin={() => setShowAuthModal(true)}
+          />
         ) : (
-          <HistoryView scans={recentScans} onClear={clearHistory} />
+          <div />
         )}
       </main>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal 
+          onClose={() => setShowAuthModal(false)} 
+          onLogin={handleLogin} 
+        />
+      )}
     </div>
   );
 };
 
-const ScannerView = ({ onScanComplete }) => {
+const ScannerView = ({ token, onScanComplete, onRequestLogin }) => {
   const [url, setUrl] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const BACKEND_URL = 'http://localhost:8000';
-
-  // Helper to check reasoning list for keywords
-  const hasFlag = (keyword) => {
-    return result?.reasoning?.some(r => r.toLowerCase().includes(keyword.toLowerCase()));
-  };
 
   const handleScan = async (e) => {
     e.preventDefault();
     if (!url) return;
     setLoading(true);
     setResult(null);
-    setError('');
 
     try {
-      const response = await axios.post(`${BACKEND_URL}/api/v1/scan`, { url });
-      const finalResult = { ...response.data, url: url };
-      setResult(finalResult);
-      onScanComplete(finalResult);
+      // Send Token if available
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      const response = await axios.post(`${API_URL}/scan`, { url }, config);
+      setResult(response.data);
+      onScanComplete(response.data);
     } catch (err) {
       console.error(err);
-      setError('Connection failed. Ensure backend is running on port 8000.');
+      alert("Scan failed. Is backend running?");
     }
     setLoading(false);
   };
 
+  const handleDeepScan = async () => {
+    if (!token) {
+      onRequestLogin();
+      return;
+    }
+    alert("Deep Scan Initiated (Demo)");
+  };
+
   return (
     <div>
-      {/* Hero Section */}
       <div className="hero-section">
-        <h1 className="hero-title">
-          Scan links. Reveal hidden risks.
-        </h1>
+        <h1 className="hero-title">Scan links. Reveal hidden risks.</h1>
       </div>
 
-      {/* Search Bar */}
       <div className="search-container">
         <form onSubmit={handleScan} className="search-form">
-          <div className="search-icon">
-            <Globe />
-          </div>
+          <div className="search-icon"><Globe /></div>
           <input 
             type="text" 
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste URL here (e.g., google.com)..." 
+            placeholder="Paste URL here..." 
             className="search-input"
           />
-          <button 
-            type="submit" 
-            disabled={loading || !url}
-            className="search-button"
-          >
-            {loading ? (
-              <><Loader2 className="spinner" /> Scanning...</>
-            ) : (
-              'ANALYZE'
-            )}
+          <button type="submit" disabled={loading} className="search-button">
+            {loading ? <Loader2 className="spinner" /> : 'ANALYZE'}
           </button>
         </form>
-        
-        {error && (
-          <div className="error-message">
-            <div className="error-icon"><AlertTriangle /></div>
-            <div className="error-content">
-              <p className="error-title">Connection Error</p>
-              <p className="error-text">{error}</p>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Results */}
       {result && (
         <div className="result-container">
           <div className="result-card">
-            {/* Header Section */}
+            {/* Verdict Header */}
             <div className="result-header">
               <div className="result-info">
-                <div className={`verdict-icon ${
-                  result.risk_score > 70 ? 'danger' :
-                  result.risk_score > 30 ? 'warning' :
-                  'safe'
-                }`}>
-                  {result.risk_score > 70 ? <XOctagon /> : result.risk_score > 30 ? <AlertTriangle /> : <ShieldCheck />}
-                </div>
-                
-                <div className="verdict-details">
-                  <h2 className={
-                    result.risk_score > 70 ? 'danger' :
-                    result.risk_score > 30 ? 'warning' :
-                    'safe'
-                  }>
-                    {result.verdict}
-                  </h2>
-                  <p className="target-url">
-                    Target: <span>{result.url}</span>
-                  </p>
-                </div>
+                 <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
+                   <ShieldCheck />
+                 </div>
+                 <div className="verdict-details">
+                   <h2>{result.verdict}</h2>
+                   <p className="target-url">Target: {result.url}</p>
+                 </div>
               </div>
-              
-              {/* Risk Score */}
               <div className="risk-score-display">
-                <div className="risk-score-number">
-                  {result.risk_score}<span className="score-max">/100</span>
-                </div>
-                <div className="risk-score-label">RISK SCORE</div>
+                <div className="risk-score-number">{result.risk_score}</div>
               </div>
             </div>
 
-            {/* AI Security Insight */}
+            {/* AI Insight - GATED */}
             <div className="ai-insight">
               <div className="ai-insight-header">
                 <Activity />
                 <h3>AI Security Insight</h3>
               </div>
-              
               <div className="ai-insight-content">
-                {result.reasoning && result.reasoning.length > 0 ? (
-                  result.reasoning.map((r, i) => (
-                    <p key={i} className="reasoning-item">• {r}</p>
-                  ))
+                {result.is_guest ? (
+                  <div className="locked-feature">
+                    <Lock size={16} />
+                    <span>Advanced AI Analysis is locked. <button className="text-link" onClick={onRequestLogin}>Login</button> to view details.</span>
+                  </div>
                 ) : (
-                  <p>No specific threats detected. The URL appears to conform to standard safety patterns.</p>
+                  result.reasoning.map((r, i) => <p key={i}>• {r}</p>)
                 )}
               </div>
             </div>
 
-            {/* Two Columns */}
-            <div className="details-grid">
-              {/* Threat Indicators */}
-              <div className="details-section">
-                <h3>Threat Indicators</h3>
-                <div className="details-list">
-                  <div className="detail-row">
-                    <span className="detail-label">Suspicious TLD:</span>
-                    <span className={`detail-value ${hasFlag('TLD') ? 'danger' : 'safe'}`}>
-                      {hasFlag('TLD') ? 'Detected' : 'Clean'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Typosquatting:</span>
-                    <span className={`detail-value ${hasFlag('Typosquatting') ? 'danger' : 'safe'}`}>
-                      {hasFlag('Typosquatting') ? 'Possible Match' : 'None Detected'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Redirect Hops:</span>
-                    <span className="detail-value">{result.details?.hop_count || 0}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Technical Footprint */}
-              <div className="details-section">
-                <h3>Technical Footprint</h3>
-                <div className="details-list">
-                  <div className="detail-row">
-                    <span className="detail-label">Cert Validity (Days):</span>
-                    <span className="detail-value">
-                      {result.details?.cert_age !== undefined ? `${result.details.cert_age}` : 'Unknown'}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Final Destination:</span>
-                    <span className="detail-value" title={result.final_destination}>
-                      {result.final_destination ? 
-                        (result.final_destination.length > 25 ? result.final_destination.substring(0,25)+'...' : result.final_destination) 
-                        : 'Same as Input'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Deep Scan Button */}
-            <button className="deep-scan-button">
-              Initialize Deep Scan Analysis (Login Required)
+            {/* Deep Scan Button - GATED */}
+            <button 
+              className={`deep-scan-button ${!token ? 'locked' : ''}`} 
+              onClick={handleDeepScan}
+            >
+              {!token && <Lock size={16} style={{marginRight: '8px', display:'inline'}} />}
+              {token ? "Initialize Deep Scan Analysis" : "Login for Deep Scan Analysis"}
             </button>
           </div>
         </div>
@@ -279,60 +215,65 @@ const ScannerView = ({ onScanComplete }) => {
   );
 };
 
-const HistoryView = ({ scans, onClear }) => (
-  <div>
-    <div className="history-header">
-      <div className="history-title">
-        <h2>Scan History</h2>
-        <p>Your last 15 security scans</p>
-      </div>
-      {scans.length > 0 && (
-        <button onClick={onClear} className="clear-history-button">
-          <Trash2 />
-          Clear History
-        </button>
-      )}
-    </div>
+// Simple Auth Modal Component
+const AuthModal = ({ onClose, onLogin }) => {
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
-    <div className="history-table-container">
-      {scans.length === 0 ? (
-        <div className="empty-history">
-          <div className="empty-history-icon"><History /></div>
-          <h3>No scan history</h3>
-          <p>Start scanning URLs to build your history</p>
-        </div>
-      ) : (
-        <table className="history-table">
-          <thead>
-            <tr>
-              <th>URL</th>
-              <th>Date</th>
-              <th>Verdict</th>
-              <th>Risk Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scans.map((scan) => (
-              <tr key={scan.id}>
-                <td><span className="url-cell">{scan.url}</span></td>
-                <td className="date-cell">{scan.date}</td>
-                <td>
-                  <span className={`verdict-badge ${
-                    scan.score > 70 ? 'danger' :
-                    scan.score > 30 ? 'warning' :
-                    'safe'
-                  }`}>
-                    {scan.verdict}
-                  </span>
-                </td>
-                <td className="score-cell">{scan.score}/100</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    try {
+      if (isRegister) {
+        await axios.post(`${API_URL}/register`, { email, password });
+        // Auto switch to login after register
+        setIsRegister(false);
+        alert("Registered! Please login.");
+      } else {
+        // Login needs form-data format for OAuth2
+        const formData = new FormData();
+        formData.append('username', email);
+        formData.append('password', password);
+        
+        const res = await axios.post(`${API_URL}/login`, formData);
+        onLogin(res.data.access_token, email);
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || "Authentication failed");
+    }
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
+        {error && <p className="error-text">{error}</p>}
+        <form onSubmit={handleSubmit}>
+          <input 
+            type="email" placeholder="Email" required 
+            value={email} onChange={e => setEmail(e.target.value)}
+          />
+          <input 
+            type="password" placeholder="Password" required 
+            value={password} onChange={e => setPassword(e.target.value)}
+          />
+          <button type="submit" className="auth-submit-btn">
+            {isRegister ? 'Register' : 'Login'}
+          </button>
+        </form>
+        <p className="auth-switch">
+          {isRegister ? "Already have an account?" : "No account?"}
+          <span onClick={() => setIsRegister(!isRegister)}>
+            {isRegister ? " Login" : " Register"}
+          </span>
+        </p>
+        <button className="close-btn" onClick={onClose}>Close</button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default App;

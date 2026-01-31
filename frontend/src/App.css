@@ -183,3 +183,27 @@ body {
   .nav-content { padding: 1rem; }
   .main-content { padding: 2rem 1rem; }
 }
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: var(--bg-secondary); padding: 2rem; border-radius: 1rem;
+  width: 100%; max-width: 400px; text-align: center;
+  box-shadow: var(--shadow-xl);
+}
+.modal-content input {
+  width: 100%; padding: 0.75rem; margin-bottom: 1rem;
+  border: 1px solid var(--border-color); border-radius: 0.5rem;
+  background: var(--bg-primary); color: var(--text-primary);
+}
+.auth-submit-btn {
+  width: 100%; background: var(--accent-blue); color: white;
+  padding: 0.75rem; border-radius: 0.5rem; border: none; font-weight: bold; cursor: pointer;
+}
+.auth-switch { margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary); }
+.auth-switch span { color: var(--accent-blue); cursor: pointer; font-weight: 600; }
+.text-link { background: none; border: none; color: var(--accent-blue); font-weight: bold; cursor: pointer; padding: 0; }
+.locked-feature { display: flex; align-items: center; gap: 0.5rem; color: var(--text-tertiary); font-style: italic; }
+.login-btn-nav { background: var(--accent-blue); color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight: 600;}
