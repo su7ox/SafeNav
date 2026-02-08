@@ -21,7 +21,7 @@ from app.utils.scoring import calculate_fusion_score
 
 router = APIRouter()
 
-# --- FIX 1: Set auto_error=False so guests aren't blocked immediately ---
+# Guests allowed (auto_error=False)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login", auto_error=False)
 
 # --- MODELS ---
@@ -54,15 +54,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 async def get_optional_user(token: str = Depends(oauth2_scheme)):
-    """
-    Returns user if token is valid, otherwise returns None.
-    Does NOT raise 401 error.
-    """
     if not token:
         return None
-        
     try:
-        # We reuse the logic but catch the error to return None instead
         return await get_current_user(token)
     except HTTPException:
         return None
@@ -105,24 +99,18 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @router.post("/scan")
 async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_user)):
-    """
-    Main Scan Endpoint.
-    - Guests: Get full 6-category analysis, but 'reasoning' is hidden.
-    - Users: Get full analysis + AI reasoning.
-    """
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
 
-    # --- 1. EXECUTE ANALYSIS (Computes for EVERYONE) ---
     try:
         normalized_url, hostname = normalize_url(request.url)
         validate_target_ip(hostname) # SSRF Check
 
-        # Parallel Execution (simulated here)
+        # Parallel Execution
         fingerprint = identify_link_type(normalized_url, hostname)
         trace = await trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
-        reputation = await check_domain_reputation(normalized_url) # Updated to await
+        reputation = await check_domain_reputation(normalized_url) # Await async function
         lexical = check_lexical_risk(normalized_url, hostname)
         content_data = inspect_content(trace.get("html_content"), normalized_url)
         
@@ -141,20 +129,20 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         print(f"Scan Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    # --- 2. CALCULATE FLAGS & CATEGORIES ---
+    # --- CALCULATE FLAGS ---
     
-    # Category 1: SSL
+    # 1. SSL
     https_enabled = normalized_url.startswith("https")
     cert_status = "Valid" if ssl_data.get("is_valid") else "Expired/Invalid"
     if not https_enabled: cert_status = "None"
     
-    # Category 2: Phishing
+    # 2. Phishing
     is_typosquat = lexical.get("is_typosquat", False)
     brand_detected = lexical.get("target", "None") if is_typosquat else "None"
     suspicious_kw = any(x in normalized_url for x in ["login", "verify", "update", "secure", "bank"])
     is_homograph = "xn--" in hostname 
 
-    # Category 3: Reputation
+    # 3. Reputation
     dom_age = reputation.get("domain_age_days")
     if dom_age is None:
         dom_status = "Unknown"
@@ -166,7 +154,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     is_sus_tld = reputation.get("is_suspicious_tld", False)
     whois_privacy = True 
 
-    # Category 4: Link Structure
+    # 4. Link Structure
     link_cat = "Standard"
     if fingerprint["is_shortened"]: link_cat = "Shortened"
     elif fingerprint["is_ip_based"]: link_cat = "IP Address"
@@ -174,13 +162,11 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     
     tags = fingerprint.get("tags", [])
     service_type = tags[0].title() if tags else "General Website"
-    
     short_provider = fingerprint.get("provider")
     short_provider = short_provider.title() if short_provider else "None"
-
     is_obfuscated = "%" in request.url or "0x" in request.url
 
-    # Category 5: Redirects
+    # 5. Redirects
     hops = trace.get("hop_count", 0)
     parsed_start = urlparse(normalized_url)
     parsed_end = urlparse(trace.get("final_url", ""))
@@ -188,10 +174,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     end_domain = parsed_end.netloc
     cross_domain = start_domain != end_domain
     
-    # Category 6: Content
-    insecure_form = content_data.get("has_login_form") and not https_enabled
-
-    # --- 3. CONSTRUCT DETAILS (Always Shown) ---
+    # --- CONSTRUCT DETAILS ---
     details = {
         "ssl_security": {
             "https_enabled": "Yes" if https_enabled else "No",
@@ -229,14 +212,13 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
             "redirect_loop": "No"
         },
         "content_safety": {
-            "login_detected": "Yes" if content_data.get("has_login_form") else "No",
-            "password_field": "Yes" if content_data.get("has_password_field") else "No",
-            "insecure_submission": "Unsafe" if insecure_form else "Safe",
-            "client_redirect": "No"
+            # UPDATED: Removed misleading login checks
+            "dynamic_content": "Yes" if content_data.get("dynamic_content_detected") else "No",
+            "status": "Analysis Limited (Static)" 
         }
     }
 
-    # --- 4. SCORING ---
+    # --- SCORING ---
     all_warnings = (
         fingerprint["tags"] + trace["warning_flags"] + 
         ssl_data["warning_flags"] + reputation["warning_flags"] + 
@@ -249,27 +231,21 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         "url": normalized_url,
         "risk_score": final_score,
         "verdict": verdict,
-        "details": details,  # <--- 6 Results are here, visible to everyone
+        "details": details,
         "is_guest": False,
         "scan_time": datetime.utcnow().isoformat()
     }
 
-    # --- 5. GUEST LOGIC (Hide AI Summary) ---
     if not user:
-        # Guests see "Locked" message for reasoning
         response["reasoning"] = ["🔒 Login to view AI Security Analysis"]
         response["is_guest"] = True
     else:
-        # Users see the actual AI reasoning/warnings
         response["reasoning"] = list(set(all_warnings))
 
     return response
 
 @router.post("/deep-scan")
 async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)):
-    """
-    Protected Endpoint. Requires Login.
-    """
     return {
         "status": "Deep Scan Initiated",
         "user": user["email"],

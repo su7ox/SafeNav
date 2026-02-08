@@ -3,20 +3,17 @@ uvicorn
 httpx
 scikit-learn
 beautifulsoup4
-tldextract
-idna
-python-levenshtein
+tldextract==5.1.1
+idna==3.7
+python-Levenshtein==0.25.0
 dnspython
 python-whois
 cryptography
 redis
 joblib
-
-motor           # MongoDB Driver
-python-jose[cryptography]  # JWT Tokens
-passlib[bcrypt] # Password Hashing
-python-multipart # Form data for login
+motor
+python-jose[cryptography]
+passlib[argon2]
+python-multipart
 email-validator
-tldextract==5.1.1
-python-Levenshtein==0.25.0
-idna==3.7
+certifi
