@@ -31,8 +31,9 @@ Designed with separable components for easy extension, testing, and experimentat
 SafeNav is organized as a full-stack application:
 
 - **frontend/** – React-based user interface  
-- **backend/** – Python backend responsible for API handling and link analysis
+- **backend/** – Python backend responsible for API handling and link analysis  
 
+---
 
 ## 🎨 Frontend
 
@@ -93,16 +94,147 @@ Planned enhancements include:
 
 ---
 
-## 👨‍💻 Author
+## ▶️ How to Run SafeNav
 
-**Manish Barti**  
-B.Tech CSE Student  
-GitHub: https://github.com/su7ox
+SafeNav can be executed in **two different modes** depending on the use case:
+
+- **Docker Mode** – Recommended for demo, evaluation, and deployment  
+- **Development Mode** – Recommended while coding and debugging  
 
 ---
 
-## ⚠️ Disclaimer
+## 🐳 Running with Docker (Recommended)
 
-SafeNav is an academic and experimental project.  
-It is intended for educational and research purposes only and should not be used as a replacement for professional security solutions.
+This mode runs the **frontend, backend, and database together** using Docker Compose.
 
+### Prerequisites
+- Docker Desktop installed  
+- Docker Compose enabled  
+
+### Steps
+
+1. Clone the repository:
+```bash
+git clone https://github.com/su7ox/SafeNav.git
+cd SafeNav
+```
+
+2. Build and start all services:
+```bash
+docker-compose up -d
+```
+
+3. Verify running containers:
+```bash
+docker ps
+```
+
+### Access the Application
+
+* **Frontend UI:** [http://localhost:5173](http://localhost:5173)
+* **Backend API:** [http://localhost:8000](http://localhost:8000)
+* **API Documentation (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Stop the Application
+
+```bash
+docker-compose down
+```
+
+### Apply Code Changes
+
+Docker does not automatically reflect code changes.
+
+```bash
+docker-compose build
+docker-compose up -d
+```
+
+---
+
+## 🧑‍💻 Running in Development Mode (Without Docker)
+
+This mode supports **hot reload** and is recommended during development.
+
+---
+
+### 🔹 Backend (FastAPI)
+
+#### Prerequisites
+
+* Python 3.10 or higher
+
+#### Steps
+
+1. Navigate to backend directory:
+```bash
+cd backend
+```
+
+2. Create virtual environment (one-time):
+```bash
+python -m venv venv
+```
+
+3. Activate virtual environment:
+```bash
+venv\Scripts\activate
+```
+
+4. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+5. Run backend server:
+```bash
+uvicorn app.main:app --reload
+```
+
+Backend will be available at:
+
+* [http://localhost:8000](http://localhost:8000)
+* [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+### 🔹 Frontend (React + Vite)
+
+#### Prerequisites
+
+* Node.js (LTS version recommended)
+
+#### Steps
+
+1. Open a new terminal and navigate to frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start frontend development server:
+```bash
+npm run dev
+```
+
+Frontend will be available at:
+
+* [http://localhost:5173](http://localhost:5173)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 👤 Author
+
+**su7ox**
+
+GitHub: [@su7ox](https://github.com/su7ox)
