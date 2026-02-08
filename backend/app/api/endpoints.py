@@ -1,9 +1,12 @@
+import socket  # <--- NEW IMPORT
+import ipaddress # <--- NEW IMPORT
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from app.core.database import DB
 from app.core.security import verify_password, get_password_hash, create_access_token
 from urllib.parse import urlparse
+from datetime import datetime
 
 # Import Analysis Modules
 from app.core.normalization import normalize_url
@@ -48,7 +51,31 @@ async def get_optional_user(token: str = Depends(oauth2_scheme)):
     try:
         return await get_current_user(token)
     except:
-        return None  # Allow guest access
+        return None 
+
+# --- HELPER: SSRF CHECK ---
+def validate_target_ip(hostname):
+    """
+    Prevents scanning localhost or private internal networks (SSRF Protection).
+    Returns True if safe, raises HTTPException if unsafe.
+    """
+    try:
+        ip = socket.gethostbyname(hostname)
+        ip_obj = ipaddress.ip_address(ip)
+        
+        # Block private IPs (Localhost, 192.168.x.x, 10.x.x.x, etc.)
+        if ip_obj.is_private or ip_obj.is_loopback:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Scanning internal/private IPs ({ip}) is not allowed."
+            )
+        return True
+    except socket.gaierror:
+        # Domain doesn't exist - this is handled later, but not an SSRF risk
+        pass
+    except ValueError:
+        pass # Not an IP
+    return True
 
 # --- ROUTES ---
 
@@ -78,16 +105,40 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         raise HTTPException(status_code=400, detail="URL is required")
 
     # --- 1. EXECUTE ANALYSIS ---
-    normalized_url, hostname = normalize_url(request.url)
-    fingerprint = identify_link_type(normalized_url, hostname)
-    trace = await trace_redirects(normalized_url)
-    ssl_data = inspect_ssl(hostname)
-    reputation = check_domain_reputation(normalized_url)
-    lexical = check_lexical_risk(normalized_url, hostname)
-    content_data = inspect_content(trace.get("html_content"), normalized_url)
-    
-    # ML Prediction
-    ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
+    try:
+        normalized_url, hostname = normalize_url(request.url)
+        
+        # [NEW] SSRF Protection Check
+        validate_target_ip(hostname)
+
+        # Standard Checks
+        fingerprint = identify_link_type(normalized_url, hostname)
+        trace = await trace_redirects(normalized_url)
+        ssl_data = inspect_ssl(hostname)
+        reputation = check_domain_reputation(normalized_url)
+        lexical = check_lexical_risk(normalized_url, hostname)
+        content_data = inspect_content(trace.get("html_content"), normalized_url)
+        
+        # ML Prediction
+        ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
+
+    # --- [NEW] GRACEFUL ERROR HANDLING ---
+    except socket.gaierror:
+        # Domain does not exist (DNS Error)
+        return {
+            "url": request.url,
+            "risk_score": 0,
+            "verdict": "Unreachable",
+            "details": {
+                "error": "Domain does not exist or could not be resolved.",
+                "status": "Offline"
+            },
+            "scan_time": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        print(f"Analysis Failed: {e}")
+        # Only 500 if it's a true unexpected crash
+        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
     # --- 2. CALCULATE FLAGS & CATEGORIES ---
     
@@ -103,8 +154,14 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     is_homograph = "xn--" in hostname 
 
     # Category 3: Reputation
-    dom_age = reputation.get("domain_age_days", 0)
-    dom_status = "New (< 30 Days)" if dom_age < 30 else "Established"
+    dom_age = reputation.get("domain_age_days") 
+    if dom_age is None:
+        dom_status = "Unknown"
+        dom_age_display = "Unknown"
+    else:
+        dom_status = "New (< 30 Days)" if dom_age < 30 else "Established"
+        dom_age_display = f"{dom_age} days"
+        
     is_sus_tld = reputation.get("is_suspicious_tld", False)
     whois_privacy = True 
 
@@ -114,7 +171,6 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     elif fingerprint["is_ip_based"]: link_cat = "IP Address"
     elif fingerprint["is_download"]: link_cat = "File/App"
     
-    # --- BUG FIX HERE: CHECK IF LIST IS EMPTY ---
     tags = fingerprint.get("tags", [])
     service_type = tags[0].title() if tags else "General Website"
     
@@ -125,8 +181,11 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
 
     # Category 5: Redirects
     hops = trace.get("hop_count", 0)
-    start_domain = urlparse(normalized_url).netloc
-    end_domain = urlparse(trace.get("final_url", "")).netloc
+    parsed_start = urlparse(normalized_url)
+    parsed_end = urlparse(trace.get("final_url", ""))
+    
+    start_domain = parsed_start.netloc
+    end_domain = parsed_end.netloc
     cross_domain = start_domain != end_domain
     
     # Category 6: Content
@@ -148,7 +207,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
             "homograph_attack": "Yes" if is_homograph else "No"
         },
         "domain_reputation": {
-            "domain_age": f"{dom_age} days",
+            "domain_age": dom_age_display,
             "domain_status": dom_status,
             "suspicious_tld": "Yes" if is_sus_tld else "No",
             "registrar_trust": "Normal", 
@@ -191,7 +250,8 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         "risk_score": final_score,
         "verdict": verdict,
         "details": details,
-        "is_guest": False
+        "is_guest": False,
+        "scan_time": datetime.utcnow().isoformat()
     }
 
     if not user:

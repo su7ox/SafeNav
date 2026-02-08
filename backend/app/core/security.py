@@ -136,15 +136,9 @@ class PhishingDetector:
         best_match = None
         best_score = 0
         
-        # Check against all brands
+        # 1. Check for exact match first (Legitimate Site)
+        # This prevents flagging google.com as a partial match
         for brand_key, brand_info in self.brands.items():
-            # Skip very short brands
-            if len(brand_key) < 4:
-                continue
-            
-            similarity = self.calculate_similarity(domain_name, brand_key)
-            
-            # Check for exact match (legitimate site)
             if domain_name == brand_key:
                 return {
                     'is_typosquatting': False,
@@ -154,39 +148,64 @@ class PhishingDetector:
                     'techniques': [],
                     'details': {'exact_match': True}
                 }
-            
-            # Potential typosquat detected
-            if similarity >= 0.65:  # 65% similarity threshold
-                # Check character substitutions
-                substitution_info = self.detect_character_substitution(domain_name)
+
+        # 2. Analyze variations (Full domain + Hyphenated parts)
+        # We split by hyphen to catch cases like 'amazon-account' or 'google-login'
+        check_candidates = set([domain_name])
+        if '-' in domain_name:
+            check_candidates.update(domain_name.split('-'))
+        
+        # Check each candidate part against the brand database
+        for candidate in check_candidates:
+            # Skip short candidates to avoid false positives (e.g. 'com', 'net')
+            if len(candidate) < 3:
+                continue
+
+            for brand_key, brand_info in self.brands.items():
+                # Skip very short brands
+                if len(brand_key) < 4:
+                    continue
                 
-                techniques = []
-                confidence = similarity * 100
+                similarity = self.calculate_similarity(candidate, brand_key)
                 
-                if substitution_info['has_substitution']:
-                    techniques.append('character_substitution')
-                    confidence *= 1.3  # Boost confidence for substitutions
-                
-                if similarity >= 0.8:
-                    techniques.append('high_similarity')
-                
-                # Check Levenshtein distance
-                lev_distance = distance(domain_name.lower(), brand_key.lower())
-                if lev_distance <= 2:
-                    techniques.append('minor_typo')
-                    confidence *= 1.2
-                
-                # Track best match
-                if similarity > best_score:
-                    best_score = similarity
-                    best_match = {
-                        'brand': brand_info['name'],
-                        'brand_key': brand_key,
-                        'similarity': similarity,
-                        'confidence': min(confidence, 99),  # Cap at 99%
-                        'techniques': techniques,
-                        'substitutions': substitution_info['substitutions']
-                    }
+                # Potential typosquat detected on this part
+                if similarity >= 0.65:  # 65% similarity threshold
+                    # Check character substitutions on the candidate
+                    substitution_info = self.detect_character_substitution(candidate)
+                    
+                    techniques = []
+                    confidence = similarity * 100
+                    
+                    if substitution_info['has_substitution']:
+                        techniques.append('character_substitution')
+                        confidence *= 1.3  # Boost confidence for substitutions
+                    
+                    if similarity >= 0.8:
+                        techniques.append('high_similarity')
+                    
+                    # Check for Brand Inclusion (Exact match on a PART of the domain)
+                    # e.g. 'apple' inside 'apple-verify'
+                    if candidate == brand_key:
+                        techniques.append('brand_inclusion')
+                        confidence = 95.0
+
+                    # Check Levenshtein distance
+                    lev_distance = distance(candidate.lower(), brand_key.lower())
+                    if lev_distance <= 2:
+                        techniques.append('minor_typo')
+                        confidence *= 1.2
+                    
+                    # Track best match
+                    if similarity > best_score:
+                        best_score = similarity
+                        best_match = {
+                            'brand': brand_info['name'],
+                            'brand_key': brand_key,
+                            'similarity': similarity,
+                            'confidence': min(confidence, 99),  # Cap at 99%
+                            'techniques': techniques,
+                            'substitutions': substitution_info['substitutions']
+                        }
         
         # If we found a good match
         if best_match and best_match['confidence'] >= 65:
