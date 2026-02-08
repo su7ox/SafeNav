@@ -1,5 +1,5 @@
-import socket  # <--- NEW IMPORT
-import ipaddress # <--- NEW IMPORT
+import socket
+import ipaddress
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
@@ -20,7 +20,9 @@ from app.core.content_scan import inspect_content
 from app.utils.scoring import calculate_fusion_score
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login")
+
+# --- FIX 1: Set auto_error=False so guests aren't blocked immediately ---
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login", auto_error=False)
 
 # --- MODELS ---
 class UserCreate(BaseModel):
@@ -34,6 +36,10 @@ class ScanRequest(BaseModel):
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     from app.core.security import SECRET_KEY, ALGORITHM
     from jose import jwt, JWTError
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -48,33 +54,31 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 async def get_optional_user(token: str = Depends(oauth2_scheme)):
+    """
+    Returns user if token is valid, otherwise returns None.
+    Does NOT raise 401 error.
+    """
+    if not token:
+        return None
+        
     try:
+        # We reuse the logic but catch the error to return None instead
         return await get_current_user(token)
-    except:
-        return None 
+    except HTTPException:
+        return None
 
-# --- HELPER: SSRF CHECK ---
+# --- SSRF PROTECTION ---
 def validate_target_ip(hostname):
-    """
-    Prevents scanning localhost or private internal networks (SSRF Protection).
-    Returns True if safe, raises HTTPException if unsafe.
-    """
     try:
         ip = socket.gethostbyname(hostname)
         ip_obj = ipaddress.ip_address(ip)
-        
-        # Block private IPs (Localhost, 192.168.x.x, 10.x.x.x, etc.)
         if ip_obj.is_private or ip_obj.is_loopback:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Scanning internal/private IPs ({ip}) is not allowed."
-            )
+            raise HTTPException(status_code=400, detail="Scanning internal IPs is prohibited.")
         return True
     except socket.gaierror:
-        # Domain doesn't exist - this is handled later, but not an SSRF risk
-        pass
+        pass 
     except ValueError:
-        pass # Not an IP
+        pass
     return True
 
 # --- ROUTES ---
@@ -101,44 +105,41 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @router.post("/scan")
 async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_user)):
+    """
+    Main Scan Endpoint.
+    - Guests: Get full 6-category analysis, but 'reasoning' is hidden.
+    - Users: Get full analysis + AI reasoning.
+    """
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
 
-    # --- 1. EXECUTE ANALYSIS ---
+    # --- 1. EXECUTE ANALYSIS (Computes for EVERYONE) ---
     try:
         normalized_url, hostname = normalize_url(request.url)
-        
-        # [NEW] SSRF Protection Check
-        validate_target_ip(hostname)
+        validate_target_ip(hostname) # SSRF Check
 
-        # Standard Checks
+        # Parallel Execution (simulated here)
         fingerprint = identify_link_type(normalized_url, hostname)
         trace = await trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
-        reputation = await check_domain_reputation(normalized_url)
+        reputation = await check_domain_reputation(normalized_url) # Updated to await
         lexical = check_lexical_risk(normalized_url, hostname)
         content_data = inspect_content(trace.get("html_content"), normalized_url)
         
         # ML Prediction
         ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
 
-    # --- [NEW] GRACEFUL ERROR HANDLING ---
     except socket.gaierror:
-        # Domain does not exist (DNS Error)
         return {
             "url": request.url,
             "risk_score": 0,
             "verdict": "Unreachable",
-            "details": {
-                "error": "Domain does not exist or could not be resolved.",
-                "status": "Offline"
-            },
+            "details": {"error": "Domain does not exist"},
             "scan_time": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        print(f"Analysis Failed: {e}")
-        # Only 500 if it's a true unexpected crash
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+        print(f"Scan Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
     # --- 2. CALCULATE FLAGS & CATEGORIES ---
     
@@ -154,7 +155,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     is_homograph = "xn--" in hostname 
 
     # Category 3: Reputation
-    dom_age = reputation.get("domain_age_days") 
+    dom_age = reputation.get("domain_age_days")
     if dom_age is None:
         dom_status = "Unknown"
         dom_age_display = "Unknown"
@@ -183,7 +184,6 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     hops = trace.get("hop_count", 0)
     parsed_start = urlparse(normalized_url)
     parsed_end = urlparse(trace.get("final_url", ""))
-    
     start_domain = parsed_start.netloc
     end_domain = parsed_end.netloc
     cross_domain = start_domain != end_domain
@@ -191,7 +191,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     # Category 6: Content
     insecure_form = content_data.get("has_login_form") and not https_enabled
 
-    # --- 3. CONSTRUCT DETAILS ---
+    # --- 3. CONSTRUCT DETAILS (Always Shown) ---
     details = {
         "ssl_security": {
             "https_enabled": "Yes" if https_enabled else "No",
@@ -249,21 +249,27 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         "url": normalized_url,
         "risk_score": final_score,
         "verdict": verdict,
-        "details": details,
+        "details": details,  # <--- 6 Results are here, visible to everyone
         "is_guest": False,
         "scan_time": datetime.utcnow().isoformat()
     }
 
+    # --- 5. GUEST LOGIC (Hide AI Summary) ---
     if not user:
+        # Guests see "Locked" message for reasoning
         response["reasoning"] = ["🔒 Login to view AI Security Analysis"]
         response["is_guest"] = True
     else:
+        # Users see the actual AI reasoning/warnings
         response["reasoning"] = list(set(all_warnings))
 
     return response
 
 @router.post("/deep-scan")
 async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)):
+    """
+    Protected Endpoint. Requires Login.
+    """
     return {
         "status": "Deep Scan Initiated",
         "user": user["email"],
