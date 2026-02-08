@@ -1,10 +1,21 @@
 import httpx
-from urllib.parse import urlparse
+import socket
+import ipaddress
+from urllib.parse import urlparse, urljoin
 
 # Module-specific constants
-MAX_REDIRECTS = 10 # 
-TIMEOUT = 5.0      # Keeping it "Fail-Fast" [cite: 15]
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" # [cite: 121]
+MAX_REDIRECTS = 10
+TIMEOUT = 5.0
+USER_AGENT = "Mozilla/5.0 (SafeNav Security Scanner) AppleWebKit/537.36 (KHTML, like Gecko)"
+
+def is_safe_ip(hostname: str) -> bool:
+    """Check if hostname resolves to a public IP (SSRF Protection)"""
+    try:
+        ip = socket.gethostbyname(hostname)
+        ip_obj = ipaddress.ip_address(ip)
+        return not (ip_obj.is_private or ip_obj.is_loopback)
+    except:
+        return False  # If DNS fails, it's not "safe" to connect
 
 async def trace_redirects(url: str):
     report = {
@@ -12,40 +23,59 @@ async def trace_redirects(url: str):
         "hop_count": 0,
         "chain": [],
         "has_cross_domain": False,
-        "warning_flags": []
+        "warning_flags": [],
+        "html_content": ""
     }
     
-    headers = {"User-Agent": USER_AGENT} # [cite: 119]
+    headers = {"User-Agent": USER_AGENT}
+    current_url = url
+    visited_domains = set()
 
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, max_redirects=MAX_REDIRECTS, timeout=TIMEOUT) as client:
-            # stream=True allows us to stop before downloading the body [cite: 124]
-            async with client.stream("GET", url, headers=headers) as response:
-                report["final_url"] = str(response.url)
-                report["hop_count"] = len(response.history) # [cite: 127, 129]
+    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=False) as client:
+        for _ in range(MAX_REDIRECTS):
+            try:
+                # 1. SSRF Check BEFORE connection
+                parsed = urlparse(current_url)
+                if not is_safe_ip(parsed.hostname):
+                    report["warning_flags"].append("Blocked: Redirected to Private IP")
+                    break
+
+                # 2. Manual Request (No Auto-Redirect)
+                response = await client.get(current_url, headers=headers)
                 
-                # Build the Redirect Chain report [cite: 128]
-                current_domain = urlparse(url).netloc
+                # Update Chain
+                report["chain"].append(current_url)
+                visited_domains.add(parsed.netloc)
                 
-                for resp in response.history:
-                    hop_url = str(resp.url)
-                    hop_domain = urlparse(hop_url).netloc
+                # 3. Check for Redirect
+                if response.is_redirect:
+                    next_url = response.headers.get("location")
+                    if not next_url:
+                        break
+                        
+                    # Handle relative redirects
+                    current_url = urljoin(current_url, next_url)
+                    report["hop_count"] += 1
+                else:
+                    # Final Destination Reached
+                    report["final_url"] = str(response.url)
+                    # Only save HTML if it's the final page
+                    if response.status_code == 200:
+                        report["html_content"] = response.text[:200000] # Cap at 200KB
+                    break
                     
-                    # Cross-Domain check [cite: 130]
-                    if hop_domain != current_domain:
-                        report["has_cross_domain"] = True
-                    
-                    report["chain"].append(hop_url)
-                
-                # Flag suspicious behavior 
-                if report["hop_count"] > 3:
-                    report["warning_flags"].append("High Hop Count (>3)")
-                if report["has_cross_domain"]:
-                    report["warning_flags"].append("Cross-Domain Redirect Detected")
-
-    except httpx.TooManyRedirects:
-        report["warning_flags"].append("Redirect Loop Detected") # [cite: 133, 134]
-    except Exception as e:
-        report["warning_flags"].append(f"Trace Error: {str(e)}")
-
+            except httpx.RequestError as e:
+                report["warning_flags"].append(f"Trace Failed: {str(e)}")
+                break
+            except Exception as e:
+                 report["warning_flags"].append(f"Error: {str(e)}")
+                 break
+    
+    # Analyze Cross-Domain
+    if len(visited_domains) > 1:
+        report["has_cross_domain"] = True
+        
+    if report["hop_count"] > 3:
+        report["warning_flags"].append("High Hop Count (>3)")
+        
     return report

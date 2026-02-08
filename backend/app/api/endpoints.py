@@ -115,7 +115,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         fingerprint = identify_link_type(normalized_url, hostname)
         trace = await trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
-        reputation = check_domain_reputation(normalized_url)
+        reputation = await check_domain_reputation(normalized_url)
         lexical = check_lexical_risk(normalized_url, hostname)
         content_data = inspect_content(trace.get("html_content"), normalized_url)
         
