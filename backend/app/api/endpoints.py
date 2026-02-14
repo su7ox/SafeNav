@@ -7,6 +7,7 @@ from app.core.database import DB
 from app.core.security import verify_password, get_password_hash, create_access_token
 from urllib.parse import urlparse
 from datetime import datetime
+from bson import ObjectId  # <--- Added for History handling
 
 # Import Analysis Modules
 from app.core.normalization import normalize_url
@@ -53,13 +54,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
-async def get_optional_user(token: str = Depends(oauth2_scheme)):
-    if not token:
-        return None
-    try:
-        return await get_current_user(token)
-    except HTTPException:
-        return None
+# (Optional user helper removed since we are enforcing login now)
 
 # --- SSRF PROTECTION ---
 def validate_target_ip(hostname):
@@ -98,7 +93,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/scan")
-async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_user)):
+async def analyze_url(request: ScanRequest, user: dict = Depends(get_current_user)):
+    # NOTE: user is now REQUIRED (Depends(get_current_user))
+    
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
 
@@ -110,7 +107,7 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         fingerprint = identify_link_type(normalized_url, hostname)
         trace = await trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
-        reputation = await check_domain_reputation(normalized_url) # Await async function
+        reputation = await check_domain_reputation(normalized_url) 
         lexical = check_lexical_risk(normalized_url, hostname)
         content_data = inspect_content(trace.get("html_content"), normalized_url)
         
@@ -118,6 +115,8 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
         ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
 
     except socket.gaierror:
+        # Save failed scan to history too? Optionally yes.
+        # For now, we return without saving to keep history clean of bad inputs
         return {
             "url": request.url,
             "risk_score": 0,
@@ -212,7 +211,6 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
             "redirect_loop": "No"
         },
         "content_safety": {
-            # UPDATED: Removed misleading login checks
             "dynamic_content": "Yes" if content_data.get("dynamic_content_detected") else "No",
             "status": "Analysis Limited (Static)" 
         }
@@ -227,22 +225,23 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_optional_us
     final_score = calculate_fusion_score(ml_result["ml_probability"], all_warnings)
     verdict = "Safe" if final_score <= 30 else "Caution" if final_score <= 69 else "High Risk"
 
-    response = {
+    # --- SAVE TO DB & RESPOND ---
+    
+    scan_result = {
         "url": normalized_url,
         "risk_score": final_score,
         "verdict": verdict,
         "details": details,
-        "is_guest": False,
-        "scan_time": datetime.utcnow().isoformat()
+        "reasoning": list(set(all_warnings)),
+        "scan_time": datetime.utcnow().isoformat(),
+        "user_email": user["email"], # Link to user
+        "is_guest": False
     }
 
-    if not user:
-        response["reasoning"] = ["🔒 Login to view AI Security Analysis"]
-        response["is_guest"] = True
-    else:
-        response["reasoning"] = list(set(all_warnings))
+    # Insert into 'scan_history' collection
+    await DB.scan_history.insert_one(scan_result.copy())
 
-    return response
+    return scan_result
 
 @router.post("/deep-scan")
 async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)):
@@ -251,3 +250,27 @@ async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)
         "user": user["email"],
         "message": "Dynamic sandbox analysis started (Phase 2 feature)"
     }
+
+@router.get("/history")
+async def get_scan_history(user: dict = Depends(get_current_user)):
+    """
+    Fetch the last 20 scans for the logged-in user.
+    """
+    try:
+        # Find scans for this user, newest first
+        cursor = DB.scan_history.find({"user_email": user["email"]})\
+            .sort("scan_time", -1)\
+            .limit(20)
+        
+        history = await cursor.to_list(length=20)
+
+        cleaned_history = []
+        for item in history:
+            item["id"] = str(item["_id"])
+            del item["_id"]
+            cleaned_history.append(item)
+            
+        return cleaned_history
+    except Exception as e:
+        print(f"History Error: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch history")
