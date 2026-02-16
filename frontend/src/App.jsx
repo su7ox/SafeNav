@@ -1,23 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { 
-  ShieldCheck, AlertTriangle, XCircle, Search, Lock, History, LogOut, User, Loader2, Menu,
-  Globe, Sun, Moon, XOctagon, Activity 
-} from 'lucide-react';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { scanUrl, fetchHistory } from "./services/api";
+import {
+  ShieldCheck,
+  AlertTriangle,
+  XCircle,
+  Search,
+  Lock,
+  History,
+  LogOut,
+  User,
+  Loader2,
+  Menu,
+  Globe,
+  Sun,
+  Moon,
+  XOctagon,
+  Activity,
+} from "lucide-react";
+import "./App.css";
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = "http://localhost:8000/api/v1";
 
 // --- ABOUT US PAGE ---
 const AboutUs = () => (
   <div className="max-w-4xl mx-auto px-6 py-12 text-slate-300 animate-fade-in">
-    <h1 className="text-4xl font-bold text-white mb-6">About <span className="text-blue-500">SafeNav</span></h1>
+    <h1 className="text-4xl font-bold text-white mb-6">
+      About <span className="text-blue-500">SafeNav</span>
+    </h1>
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 space-y-6">
       <p className="text-lg leading-relaxed">
-        SafeNav is a cutting-edge URL security analysis tool designed to protect users from the growing threats of phishing, malware, and social engineering attacks.
+        SafeNav is a cutting-edge URL security analysis tool designed to protect
+        users from the growing threats of phishing, malware, and social
+        engineering attacks.
       </p>
       <p>
-        <strong>How it works:</strong> Unlike traditional blacklists, SafeNav uses a hybrid approach combining static analysis, lexical feature extraction, and a Machine Learning model (Random Forest) to detect zero-day threats in real-time.
+        <strong>How it works:</strong> Unlike traditional blacklists, SafeNav
+        uses a hybrid approach combining static analysis, lexical feature
+        extraction, and a Machine Learning model (Random Forest) to detect
+        zero-day threats in real-time.
       </p>
       <div className="pt-4 border-t border-slate-800">
         <h3 className="text-white font-semibold mb-2">Developed by:</h3>
@@ -28,24 +49,134 @@ const AboutUs = () => (
     </div>
   </div>
 );
+const HistoryView = ({ token, onRequestLogin }) => {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  useEffect(() => {
+    if (!token) {
+      onRequestLogin();
+      return;
+    }
+
+    const loadHistory = async () => {
+      try {
+        const data = await fetchHistory(token);
+        setHistory(data);
+      } catch (err) {
+        setError("Failed to load history.");
+        if (err.response && err.response.status === 401) {
+          onRequestLogin();
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHistory();
+  }, [token]);
+
+  if (loading)
+    return (
+      <div className="p-10 text-center text-slate-400">
+        <Loader2 className="animate-spin mx-auto mb-2" />
+        Loading History...
+      </div>
+    );
+  if (error)
+    return <div className="p-10 text-center text-rose-400">{error}</div>;
+
+  return (
+    <div className="max-w-6xl mx-auto px-6 py-12 animate-fade-in">
+      <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
+        <History className="text-blue-500" /> Scan History
+      </h1>
+
+      {history.length === 0 ? (
+        <div className="text-center text-slate-500 bg-slate-900 p-12 rounded-xl border border-slate-800">
+          <p>No scans found. Start by analyzing a URL!</p>
+        </div>
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-slate-400 text-sm uppercase tracking-wider">
+                  <th className="p-4 font-semibold">Date</th>
+                  <th className="p-4 font-semibold">URL</th>
+                  <th className="p-4 font-semibold">Verdict</th>
+                  <th className="p-4 font-semibold text-right">Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {history.map((scan) => (
+                  <tr
+                    key={scan.id}
+                    className="hover:bg-slate-800/50 transition-colors"
+                  >
+                    <td className="p-4 text-slate-400 text-sm whitespace-nowrap">
+                      {new Date(scan.scan_time).toLocaleDateString()}{" "}
+                      <span className="text-xs opacity-50">
+                        {new Date(scan.scan_time).toLocaleTimeString()}
+                      </span>
+                    </td>
+                    <td
+                      className="p-4 text-white font-medium max-w-xs truncate"
+                      title={scan.url}
+                    >
+                      {scan.url}
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                          scan.risk_score > 69
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                            : scan.risk_score > 30
+                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        }`}
+                      >
+                        {scan.risk_score > 69 ? (
+                          <XOctagon size={12} />
+                        ) : scan.risk_score > 30 ? (
+                          <AlertTriangle size={12} />
+                        ) : (
+                          <ShieldCheck size={12} />
+                        )}
+                        {scan.verdict}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right font-mono text-slate-300">
+                      {scan.risk_score}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 // --- MAIN APP COMPONENT ---
 const App = () => {
   // State for Menu & Navigation
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPage] = useState("home");
 
   // State for Auth & Theme
-  const [token, setToken] = useState(localStorage.getItem('safenav_token'));
+  const [token, setToken] = useState(localStorage.getItem("safenav_token"));
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMessage, setAuthMessage] = useState("Login"); // Custom message for the modal
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('safenav_theme');
-    if (savedTheme === 'dark') {
+    const savedTheme = localStorage.getItem("safenav_theme");
+    if (savedTheme === "dark") {
       setDarkMode(true);
-      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute("data-theme", "dark");
     }
   }, []);
 
@@ -53,11 +184,11 @@ const App = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
     if (newMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('safenav_theme', 'dark');
+      document.documentElement.setAttribute("data-theme", "dark");
+      localStorage.setItem("safenav_theme", "dark");
     } else {
-      document.documentElement.removeAttribute('data-theme');
-      localStorage.setItem('safenav_theme', 'light');
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem("safenav_theme", "light");
     }
   };
 
@@ -69,13 +200,13 @@ const App = () => {
 
   const handleLogin = (newToken) => {
     setToken(newToken);
-    localStorage.setItem('safenav_token', newToken);
+    localStorage.setItem("safenav_token", newToken);
     setShowAuthModal(false);
   };
 
   const handleLogout = () => {
     setToken(null);
-    localStorage.removeItem('safenav_token');
+    localStorage.removeItem("safenav_token");
     // Optional: Refresh page or reset view
   };
 
@@ -97,8 +228,8 @@ const App = () => {
 
             {/* HAMBURGER MENU */}
             <div className="relative">
-              <button 
-                className="icon-button" 
+              <button
+                className="icon-button"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
               >
                 <Menu size={24} />
@@ -107,32 +238,48 @@ const App = () => {
               {/* DROPDOWN MENU */}
               {isMenuOpen && (
                 <div className="absolute right-0 top-12 w-48 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-2 z-50 flex flex-col items-start overflow-hidden">
-                  
-                  <button 
-                    onClick={() => { setCurrentPage('home'); setIsMenuOpen(false); }}
+                  <button
+                    onClick={() => {
+                      setCurrentPage("home");
+                      setIsMenuOpen(false);
+                    }}
                     className="w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
                   >
                     <ShieldCheck size={18} /> Home
                   </button>
 
-                  <button 
-                    onClick={() => { setCurrentPage('about'); setIsMenuOpen(false); }}
+                  <button
+                    onClick={() => {
+                      setCurrentPage("about");
+                      setIsMenuOpen(false);
+                    }}
                     className="w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
                   >
                     <User size={18} /> About Us
                   </button>
-
+                    <button 
+                onClick={() => { setCurrentPage('history'); setIsMenuOpen(false); }}
+                className="w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
+              >
+                <History size={18} /> History
+              </button>
                   <div className="border-t border-slate-800 w-full mt-1 pt-1">
                     {token ? (
-                      <button 
-                        onClick={() => { handleLogout(); setIsMenuOpen(false); }}
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setIsMenuOpen(false);
+                        }}
                         className="w-full text-left px-4 py-3 text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors flex items-center gap-2"
                       >
                         <LogOut size={18} /> Logout
                       </button>
                     ) : (
-                      <button 
-                        onClick={() => { triggerAuthModal("Login"); setIsMenuOpen(false); }}
+                      <button
+                        onClick={() => {
+                          triggerAuthModal("Login");
+                          setIsMenuOpen(false);
+                        }}
                         className="w-full text-left px-4 py-3 text-blue-400 hover:bg-slate-800 hover:text-blue-300 transition-colors flex items-center gap-2"
                       >
                         <Lock size={18} /> Login
@@ -148,22 +295,24 @@ const App = () => {
 
       {/* --- MAIN CONTENT AREA --- */}
       <main className="main-content">
-        {currentPage === 'about' ? (
+        {currentPage === "about" ? (
           <AboutUs />
         ) : (
-          <ScannerView 
-            token={token} 
-            onRequestLogin={() => triggerAuthModal("Scan failed login required")} 
+          <ScannerView
+            token={token}
+            onRequestLogin={() =>
+              triggerAuthModal("Scan failed login required")
+            }
           />
         )}
       </main>
 
       {/* --- AUTH MODAL --- */}
       {showAuthModal && (
-        <AuthModal 
+        <AuthModal
           title={authMessage} // Pass dynamic title
-          onClose={() => setShowAuthModal(false)} 
-          onLogin={handleLogin} 
+          onClose={() => setShowAuthModal(false)}
+          onLogin={handleLogin}
         />
       )}
     </div>
@@ -180,8 +329,10 @@ const DetailCard = ({ title, icon, data }) => (
     <div className="detail-content">
       {Object.entries(data).map(([key, value]) => (
         <div key={key} className="detail-row">
-          <span className="detail-label">{key.replace(/_/g, ' ')}:</span>
-          <span className={`detail-value ${value === 'Yes' || value === 'Unsafe' || value === 'Expired' ? 'danger' : ''}`}>
+          <span className="detail-label">{key.replace(/_/g, " ")}:</span>
+          <span
+            className={`detail-value ${value === "Yes" || value === "Unsafe" || value === "Expired" ? "danger" : ""}`}
+          >
             {value}
           </span>
         </div>
@@ -192,7 +343,7 @@ const DetailCard = ({ title, icon, data }) => (
 
 // --- SCANNER VIEW COMPONENT ---
 const ScannerView = ({ token, onRequestLogin }) => {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -227,63 +378,97 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
   return (
     <div>
-      <div className="hero-section"><h1 className="hero-title">Scan links. Reveal hidden risks.</h1></div>
-      
+      <div className="hero-section">
+        <h1 className="hero-title">Scan links. Reveal hidden risks.</h1>
+      </div>
+
       <div className="search-container">
         <form onSubmit={handleScan} className="search-form">
           <Globe className="search-icon" />
-          <input 
-            type="text" 
-            value={url} 
-            onChange={(e) => setUrl(e.target.value)} 
-            placeholder="Paste URL here..." 
-            className="search-input" 
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Paste URL here..."
+            className="search-input"
           />
           <button type="submit" disabled={loading} className="search-button">
-            {loading ? <Loader2 className="spinner" /> : 'ANALYZE'}
+            {loading ? <Loader2 className="spinner" /> : "ANALYZE"}
           </button>
         </form>
       </div>
 
       {result && (
         <div className="result-container animate-fade-in-up">
-          
           {/* VERDICT HEADER */}
           <div className="result-card main-verdict">
-             <div className="result-header">
-                <div className="header-left">
-                    <div className={`verdict-icon ${result.risk_score > 50 ? 'danger' : 'safe'}`}>
-                       {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
-                    </div>
-                    <div className="verdict-text-group">
-                       <h2 className={result.risk_score > 50 ? 'danger' : 'safe'}>{result.verdict}</h2>
-                       <p className="target-url">Target: {result.url}</p>
-                    </div>
+            <div className="result-header">
+              <div className="header-left">
+                <div
+                  className={`verdict-icon ${result.risk_score > 50 ? "danger" : "safe"}`}
+                >
+                  {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
                 </div>
-                <div className="risk-score-display">
-                    <div className="risk-score-number">{result.risk_score}</div>
-                    <div className="risk-score-label">RISK SCORE</div>
+                <div className="verdict-text-group">
+                  <h2 className={result.risk_score > 50 ? "danger" : "safe"}>
+                    {result.verdict}
+                  </h2>
+                  <p className="target-url">Target: {result.url}</p>
                 </div>
-             </div>
+              </div>
+              <div className="risk-score-display">
+                <div className="risk-score-number">{result.risk_score}</div>
+                <div className="risk-score-label">RISK SCORE</div>
+              </div>
+            </div>
           </div>
           <br />
 
           {/* AI INSIGHT */}
           <div className="ai-insight">
-             <div className="ai-insight-header"><Activity /><h3>AI Security Insight</h3></div>
-             <div className="ai-insight-content">
-                {result.reasoning.map((r, i) => <p key={i}>• {r}</p>)}
-             </div>
+            <div className="ai-insight-header">
+              <Activity />
+              <h3>AI Security Insight</h3>
+            </div>
+            <div className="ai-insight-content">
+              {result.reasoning.map((r, i) => (
+                <p key={i}>• {r}</p>
+              ))}
+            </div>
           </div>
 
           {/* DETAILS GRID */}
           <div className="grid-6-layout">
-            <DetailCard title="SSL & Security" icon="🔐" data={result.details.ssl_security} />
-            <DetailCard title="Phishing Checks" icon="🎣" data={result.details.phishing_checks} />
-            <DetailCard title="Domain Reputation" icon="🌐" data={result.details.domain_reputation} />
-            <DetailCard title="Link Structure" icon="🔗" data={result.details.link_structure} />
-            <DetailCard title="Redirect Analysis" icon="🔄" data={result.details.redirect_analysis} />
-            <DetailCard title="Content Safety" icon="🧾" data={result.details.content_safety} />
+            <DetailCard
+              title="SSL & Security"
+              icon="🔐"
+              data={result.details.ssl_security}
+            />
+            <DetailCard
+              title="Phishing Checks"
+              icon="🎣"
+              data={result.details.phishing_checks}
+            />
+            <DetailCard
+              title="Domain Reputation"
+              icon="🌐"
+              data={result.details.domain_reputation}
+            />
+            <DetailCard
+              title="Link Structure"
+              icon="🔗"
+              data={result.details.link_structure}
+            />
+            <DetailCard
+              title="Redirect Analysis"
+              icon="🔄"
+              data={result.details.redirect_analysis}
+            />
+            <DetailCard
+              title="Content Safety"
+              icon="🧾"
+              data={result.details.content_safety}
+            />
           </div>
         </div>
       )}
@@ -294,25 +479,25 @@ const ScannerView = ({ token, onRequestLogin }) => {
 // --- AUTH MODAL COMPONENT ---
 const AuthModal = ({ onClose, onLogin, title }) => {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       if (isRegister) {
         await axios.post(`${API_URL}/register`, { email, password });
-        alert("Registered! Please login."); 
+        alert("Registered! Please login.");
         setIsRegister(false);
       } else {
-        const fd = new FormData(); 
-        fd.append('username', email); 
-        fd.append('password', password);
+        const fd = new FormData();
+        fd.append("username", email);
+        fd.append("password", password);
         const res = await axios.post(`${API_URL}/login`, fd);
         onLogin(res.data.access_token);
       }
-    } catch (e) { 
-      alert("Authentication Failed. Check credentials."); 
+    } catch (e) {
+      alert("Authentication Failed. Check credentials.");
     }
   };
 
@@ -320,32 +505,34 @@ const AuthModal = ({ onClose, onLogin, title }) => {
     <div className="modal-overlay">
       <div className="modal-content">
         {/* Uses the dynamic title (e.g., "Scan failed login required") */}
-        <h2>{isRegister ? 'Register' : title}</h2>
-        
+        <h2>{isRegister ? "Register" : title}</h2>
+
         <form onSubmit={handleSubmit}>
-          <input 
-            type="email" 
-            placeholder="Email" 
-            required 
-            value={email} 
-            onChange={e => setEmail(e.target.value)} 
+          <input
+            type="email"
+            placeholder="Email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
-          <input 
-            type="password" 
-            placeholder="Password" 
-            required 
-            value={password} 
-            onChange={e => setPassword(e.target.value)} 
+          <input
+            type="password"
+            placeholder="Password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
           <button type="submit" className="auth-submit-btn">
-            {isRegister ? 'Register' : 'Login'}
+            {isRegister ? "Register" : "Login"}
           </button>
         </form>
 
         <p className="auth-switch" onClick={() => setIsRegister(!isRegister)}>
           {isRegister ? "Have account? Login" : "No account? Register"}
         </p>
-        <button className="close-btn" onClick={onClose}>Close</button>
+        <button className="close-btn" onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   );
