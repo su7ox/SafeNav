@@ -17,6 +17,9 @@ import {
   Moon,
   XOctagon,
   Activity,
+  X,
+  Home,
+  Info,
 } from "lucide-react";
 import "./App.css";
 
@@ -49,6 +52,8 @@ const AboutUs = () => (
     </div>
   </div>
 );
+
+// --- HISTORY VIEW ---
 const HistoryView = ({ token, onRequestLogin }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -160,16 +165,15 @@ const HistoryView = ({ token, onRequestLogin }) => {
     </div>
   );
 };
+
 // --- MAIN APP COMPONENT ---
 const App = () => {
-  // State for Menu & Navigation
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState("home");
 
-  // State for Auth & Theme
   const [token, setToken] = useState(localStorage.getItem("safenav_token"));
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMessage, setAuthMessage] = useState("Login"); // Custom message for the modal
+  const [authMessage, setAuthMessage] = useState("Login");
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -178,6 +182,26 @@ const App = () => {
       setDarkMode(true);
       document.documentElement.setAttribute("data-theme", "dark");
     }
+  }, []);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isMenuOpen && !e.target.closest(".nav-menu-wrapper")) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMenuOpen]);
+
+  // Close menu on resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setIsMenuOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const toggleDarkMode = () => {
@@ -192,7 +216,6 @@ const App = () => {
     }
   };
 
-  // Helper to open modal with a specific title
   const triggerAuthModal = (message = "Login") => {
     setAuthMessage(message);
     setShowAuthModal(true);
@@ -207,82 +230,125 @@ const App = () => {
   const handleLogout = () => {
     setToken(null);
     localStorage.removeItem("safenav_token");
-    // Optional: Refresh page or reset view
   };
+
+  const navigate = (page) => {
+    setCurrentPage(page);
+    setIsMenuOpen(false);
+  };
+
+  const navLinks = [
+    { id: "home", label: "Scanner", Icon: ShieldCheck },
+    { id: "history", label: "History", Icon: History },
+    { id: "about", label: "About", Icon: Info },
+  ];
 
   return (
     <div className="app-container">
-      {/* --- NAVIGATION BAR --- */}
+      {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
       <nav className="nav-bar">
         <div className="nav-content">
-          <div className="nav-logo">
-            <ShieldCheck className="text-blue-500" />
+          {/* Logo */}
+          <button className="nav-logo" onClick={() => navigate("home")}>
+            <div className="logo-icon-wrap">
+              <ShieldCheck size={18} className="text-white" />
+            </div>
             <span className="logo-text">SafeNav</span>
+          </button>
+
+          {/* Desktop nav links */}
+          <div className="nav-links-desktop">
+            {navLinks.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => navigate(id)}
+                className={`nav-link-btn ${currentPage === id ? "active" : ""}`}
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
           </div>
 
+          {/* Right actions */}
           <div className="nav-actions">
-            {/* Dark Mode Toggle (Always Visible) */}
-            <button className="icon-button" onClick={toggleDarkMode}>
-              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            {/* Theme toggle */}
+            <button
+              className="icon-button theme-toggle"
+              onClick={toggleDarkMode}
+              title="Toggle theme"
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            {/* HAMBURGER MENU */}
-            <div className="relative">
+            {/* Auth button (desktop) */}
+            <div className="nav-auth-desktop">
+              {token ? (
+                <button className="auth-chip logout" onClick={handleLogout}>
+                  <LogOut size={14} /> Logout
+                </button>
+              ) : (
+                <button
+                  className="auth-chip login"
+                  onClick={() => triggerAuthModal("Login")}
+                >
+                  <Lock size={14} /> Login
+                </button>
+              )}
+            </div>
+
+            {/* Hamburger (mobile only) */}
+            <div className="nav-menu-wrapper">
               <button
-                className="icon-button"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className={`hamburger-btn ${isMenuOpen ? "open" : ""}`}
+                onClick={() => setIsMenuOpen((o) => !o)}
+                aria-label="Toggle menu"
+                aria-expanded={isMenuOpen}
               >
-                <Menu size={24} />
+                <span className="ham-bar bar1" />
+                <span className="ham-bar bar2" />
+                <span className="ham-bar bar3" />
               </button>
 
-              {/* DROPDOWN MENU */}
+              {/* Mobile dropdown */}
               {isMenuOpen && (
-                <div className="absolute right-0 top-12 w-48 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-2 z-50 flex flex-col items-start overflow-hidden">
-                  <button
-                    onClick={() => {
-                      setCurrentPage("home");
-                      setIsMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
-                  >
-                    <ShieldCheck size={18} /> Home
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setCurrentPage("about");
-                      setIsMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
-                  >
-                    <User size={18} /> About Us
-                  </button>
-                    <button 
-                onClick={() => { setCurrentPage('history'); setIsMenuOpen(false); }}
-                className="w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2"
-              >
-                <History size={18} /> History
-              </button>
-                  <div className="border-t border-slate-800 w-full mt-1 pt-1">
+                <div className="mobile-dropdown">
+                  <div className="mobile-dropdown-links">
+                    {navLinks.map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        onClick={() => navigate(id)}
+                        className={`mobile-nav-item ${currentPage === id ? "active" : ""}`}
+                      >
+                        <Icon size={17} />
+                        {label}
+                        {currentPage === id && (
+                          <span className="mobile-active-dot" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mobile-dropdown-divider" />
+                  <div className="mobile-dropdown-auth">
                     {token ? (
                       <button
+                        className="mobile-auth-btn logout"
                         onClick={() => {
                           handleLogout();
                           setIsMenuOpen(false);
                         }}
-                        className="w-full text-left px-4 py-3 text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors flex items-center gap-2"
                       >
-                        <LogOut size={18} /> Logout
+                        <LogOut size={16} /> Logout
                       </button>
                     ) : (
                       <button
+                        className="mobile-auth-btn login"
                         onClick={() => {
                           triggerAuthModal("Login");
                           setIsMenuOpen(false);
                         }}
-                        className="w-full text-left px-4 py-3 text-blue-400 hover:bg-slate-800 hover:text-blue-300 transition-colors flex items-center gap-2"
                       >
-                        <Lock size={18} /> Login
+                        <Lock size={16} /> Login
                       </button>
                     )}
                   </div>
@@ -293,24 +359,28 @@ const App = () => {
         </div>
       </nav>
 
-      {/* --- MAIN CONTENT AREA --- */}
+      {/* ── MAIN CONTENT ───────────────────────────────────────── */}
+      {/* BUG FIX: history page was missing from routing */}
       <main className="main-content">
         {currentPage === "about" ? (
           <AboutUs />
+        ) : currentPage === "history" ? (
+          <HistoryView
+            token={token}
+            onRequestLogin={() => triggerAuthModal("Login Required")}
+          />
         ) : (
           <ScannerView
             token={token}
-            onRequestLogin={() =>
-              triggerAuthModal("Scan failed login required")
-            }
+            onRequestLogin={() => triggerAuthModal("Login to Scan")}
           />
         )}
       </main>
 
-      {/* --- AUTH MODAL --- */}
+      {/* ── AUTH MODAL ─────────────────────────────────────────── */}
       {showAuthModal && (
         <AuthModal
-          title={authMessage} // Pass dynamic title
+          title={authMessage}
           onClose={() => setShowAuthModal(false)}
           onLogin={handleLogin}
         />
@@ -319,7 +389,7 @@ const App = () => {
   );
 };
 
-// --- RESULT CARD COMPONENT ---
+// --- DETAIL CARD COMPONENT ---
 const DetailCard = ({ title, icon, data }) => (
   <div className="detail-card">
     <div className="detail-header">
@@ -331,7 +401,11 @@ const DetailCard = ({ title, icon, data }) => (
         <div key={key} className="detail-row">
           <span className="detail-label">{key.replace(/_/g, " ")}:</span>
           <span
-            className={`detail-value ${value === "Yes" || value === "Unsafe" || value === "Expired" ? "danger" : ""}`}
+            className={`detail-value ${
+              value === "Yes" || value === "Unsafe" || value === "Expired"
+                ? "danger"
+                : ""
+            }`}
           >
             {value}
           </span>
@@ -351,9 +425,8 @@ const ScannerView = ({ token, onRequestLogin }) => {
     e.preventDefault();
     if (!url) return;
 
-    // --- ENFORCE LOGIN HERE ---
     if (!token) {
-      onRequestLogin(); // Trigger the modal with the "Scan failed..." message
+      onRequestLogin();
       return;
     }
 
@@ -366,7 +439,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
       setResult(response.data);
     } catch (err) {
       console.error(err);
-      // Handle 401 specifically if token expired
       if (err.response && err.response.status === 401) {
         onRequestLogin();
       } else {
@@ -379,21 +451,34 @@ const ScannerView = ({ token, onRequestLogin }) => {
   return (
     <div>
       <div className="hero-section">
-        <h1 className="hero-title">Scan links. Reveal hidden risks.</h1>
+        
+        <h1 className="hero-title">
+          Scan links.
+          <br />
+          Reveal hidden risks.
+        </h1>
       </div>
 
       <div className="search-container">
         <form onSubmit={handleScan} className="search-form">
-          <Globe className="search-icon" />
+          <Globe className="search-icon" size={18} />
           <input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste URL here..."
+            placeholder="Paste a URL to analyze…"
             className="search-input"
           />
           <button type="submit" disabled={loading} className="search-button">
-            {loading ? <Loader2 className="spinner" /> : "ANALYZE"}
+            {loading ? (
+              <>
+                <Loader2 className="spinner" size={16} /> Scanning…
+              </>
+            ) : (
+              <>
+                <Search size={15} /> Analyze
+              </>
+            )}
           </button>
         </form>
       </div>
@@ -405,29 +490,60 @@ const ScannerView = ({ token, onRequestLogin }) => {
             <div className="result-header">
               <div className="header-left">
                 <div
-                  className={`verdict-icon ${result.risk_score > 50 ? "danger" : "safe"}`}
+                  className={`verdict-icon ${
+                    result.risk_score > 69
+                      ? "danger"
+                      : result.risk_score > 30
+                        ? "warning"
+                        : "safe"
+                  }`}
                 >
-                  {result.risk_score > 50 ? <XOctagon /> : <ShieldCheck />}
+                  {result.risk_score > 69 ? (
+                    <XOctagon size={28} />
+                  ) : result.risk_score > 30 ? (
+                    <AlertTriangle size={28} />
+                  ) : (
+                    <ShieldCheck size={28} />
+                  )}
                 </div>
                 <div className="verdict-text-group">
-                  <h2 className={result.risk_score > 50 ? "danger" : "safe"}>
+                  <h2
+                    className={
+                      result.risk_score > 69
+                        ? "danger"
+                        : result.risk_score > 30
+                          ? "warning"
+                          : "safe"
+                    }
+                  >
                     {result.verdict}
                   </h2>
                   <p className="target-url">Target: {result.url}</p>
                 </div>
               </div>
               <div className="risk-score-display">
-                <div className="risk-score-number">{result.risk_score}</div>
-                <div className="risk-score-label">RISK SCORE</div>
+                <div
+                  className={`risk-score-number ${
+                    result.risk_score > 69
+                      ? "score-danger"
+                      : result.risk_score > 30
+                        ? "score-warning"
+                        : "score-safe"
+                  }`}
+                >
+                  {result.risk_score}
+                </div>
+                <div className="risk-score-label">Risk Score</div>
               </div>
             </div>
           </div>
+
           <br />
 
           {/* AI INSIGHT */}
           <div className="ai-insight">
             <div className="ai-insight-header">
-              <Activity />
+              <Activity size={15} />
               <h3>AI Security Insight</h3>
             </div>
             <div className="ai-insight-content">
@@ -502,37 +618,57 @@ const AuthModal = ({ onClose, onLogin, title }) => {
   };
 
   return (
-    <div className="modal-overlay">
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="modal-content">
-        {/* Uses the dynamic title (e.g., "Scan failed login required") */}
-        <h2>{isRegister ? "Register" : title}</h2>
+        <div className="modal-header">
+          <div className="modal-logo">
+            <ShieldCheck size={20} />
+          </div>
+          <h2>{isRegister ? "Create Account" : title}</h2>
+          <button
+            className="modal-close-btn"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <input
-            type="email"
-            placeholder="Email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
           <button type="submit" className="auth-submit-btn">
-            {isRegister ? "Register" : "Login"}
+            {isRegister ? "Create Account" : "Sign In"}
           </button>
         </form>
 
-        <p className="auth-switch" onClick={() => setIsRegister(!isRegister)}>
-          {isRegister ? "Have account? Login" : "No account? Register"}
+        <p className="auth-switch">
+          {isRegister ? "Already have an account? " : "Don't have an account? "}
+          <span onClick={() => setIsRegister(!isRegister)}>
+            {isRegister ? "Sign In" : "Register"}
+          </span>
         </p>
-        <button className="close-btn" onClick={onClose}>
-          Close
-        </button>
       </div>
     </div>
   );
