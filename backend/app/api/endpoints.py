@@ -3,11 +3,17 @@ import ipaddress
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
-from app.core.database import DB
-from app.core.security import verify_password, get_password_hash, create_access_token
 from urllib.parse import urlparse
 from datetime import datetime
-from bson import ObjectId 
+
+# --- NEW SQLALCHEMY IMPORTS ---
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import desc
+from app.core.database import get_db
+from app.core.models import User, ScanHistory
+
+from app.core.security import verify_password, get_password_hash, create_access_token
 
 # Import Analysis Modules
 from app.core.normalization import normalize_url
@@ -34,7 +40,8 @@ class ScanRequest(BaseModel):
     url: str
 
 # --- AUTH HELPER ---
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+# Added db session dependency here!
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     from app.core.security import SECRET_KEY, ALGORITHM
     from jose import jwt, JWTError
     
@@ -49,12 +56,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
     
-    user = await DB.users.find_one({"email": email})
+    # SQLAlchemy Query replacing MongoDB's find_one
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
-
-# (Optional user helper removed since we are enforcing login now)
 
 # --- SSRF PROTECTION ---
 def validate_target_ip(hostname):
@@ -73,29 +81,42 @@ def validate_target_ip(hostname):
 # --- ROUTES ---
 
 @router.post("/register")
-async def register(user: UserCreate):
-    existing_user = await DB.users.find_one({"email": user.email})
+async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    # Check if user exists
+    result = await db.execute(select(User).where(User.email == user.email))
+    existing_user = result.scalar_one_or_none()
+    
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_pw = get_password_hash(user.password)
-    user_doc = {"email": user.email, "hashed_password": hashed_pw}
-    await DB.users.insert_one(user_doc)
+    
+    # Create new user model and save it
+    new_user = User(email=user.email, hashed_password=hashed_pw)
+    db.add(new_user)
+    await db.commit()
+    
     return {"message": "User registered successfully"}
 
 @router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await DB.users.find_one({"email": form_data.username})
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    # Find user
+    result = await db.execute(select(User).where(User.email == form_data.username))
+    user = result.scalar_one_or_none()
+    
+    # Verify password against the hashed password on the model
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
-    access_token = create_access_token(data={"sub": user["email"]})
+    access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/scan")
-async def analyze_url(request: ScanRequest, user: dict = Depends(get_current_user)):
-    # NOTE: user is now REQUIRED (Depends(get_current_user))
-    
+async def analyze_url(
+    request: ScanRequest, 
+    user: User = Depends(get_current_user), # 'user' is now a SQLAlchemy User model
+    db: AsyncSession = Depends(get_db)
+):
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
 
@@ -115,8 +136,6 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_current_use
         ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
 
     except socket.gaierror:
-        # Save failed scan to history too? Optionally yes.
-        # For now, we return without saving to keep history clean of bad inputs
         return {
             "url": request.url,
             "risk_score": 0,
@@ -129,7 +148,6 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_current_use
         raise HTTPException(status_code=500, detail=str(e))
 
     # --- CALCULATE FLAGS ---
-    
     # 1. SSL
     https_enabled = normalized_url.startswith("https")
     cert_status = "Valid" if ssl_data.get("is_valid") else "Expired/Invalid"
@@ -225,50 +243,76 @@ async def analyze_url(request: ScanRequest, user: dict = Depends(get_current_use
     final_score = calculate_fusion_score(ml_result["ml_probability"], all_warnings)
     verdict = "Safe" if final_score <= 30 else "Caution" if final_score <= 69 else "High Risk"
 
-    # --- SAVE TO DB & RESPOND ---
+    # --- SAVE TO DB ---
+    scan_time = datetime.utcnow()
     
-    scan_result = {
+    # Create the SQLAlchemy model instance
+    new_scan = ScanHistory(
+        url=normalized_url,
+        risk_score=final_score,
+        verdict=verdict,
+        details=details,
+        reasoning=list(set(all_warnings)),
+        scan_time=scan_time,
+        user_email=user.email,  # Using dot notation for the SQLAlchemy model
+        is_guest=False
+    )
+    
+    db.add(new_scan)
+    await db.commit()
+    await db.refresh(new_scan) # Fetches the newly generated integer ID
+
+    # --- RESPOND ---
+    return {
+        "id": str(new_scan.id), # Return the new Postgres ID
         "url": normalized_url,
         "risk_score": final_score,
         "verdict": verdict,
         "details": details,
         "reasoning": list(set(all_warnings)),
-        "scan_time": datetime.utcnow().isoformat(),
-        "user_email": user["email"], # Link to user
+        "scan_time": scan_time.isoformat(),
+        "user_email": user.email,
         "is_guest": False
     }
 
-    # Insert into 'scan_history' collection
-    await DB.scan_history.insert_one(scan_result.copy())
-
-    return scan_result
-
 @router.post("/deep-scan")
-async def deep_scan(request: ScanRequest, user: dict = Depends(get_current_user)):
+async def deep_scan(request: ScanRequest, user: User = Depends(get_current_user)):
     return {
         "status": "Deep Scan Initiated",
-        "user": user["email"],
+        "user": user.email, # Changed to dot notation
         "message": "Dynamic sandbox analysis started (Phase 2 feature)"
     }
 
 @router.get("/history")
-async def get_scan_history(user: dict = Depends(get_current_user)):
+async def get_scan_history(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     Fetch the last 20 scans for the logged-in user.
     """
     try:
-        # Find scans for this user, newest first
-        cursor = DB.scan_history.find({"user_email": user["email"]})\
-            .sort("scan_time", -1)\
+        # SQLAlchemy query with sorting and limiting
+        query = (
+            select(ScanHistory)
+            .where(ScanHistory.user_email == user.email)
+            .order_by(desc(ScanHistory.scan_time))
             .limit(20)
+        )
         
-        history = await cursor.to_list(length=20)
+        result = await db.execute(query)
+        history = result.scalars().all()
 
+        # Format for JSON response
         cleaned_history = []
         for item in history:
-            item["id"] = str(item["_id"])
-            del item["_id"]
-            cleaned_history.append(item)
+            cleaned_history.append({
+                "id": str(item.id),
+                "url": item.url,
+                "risk_score": item.risk_score,
+                "verdict": item.verdict,
+                "details": item.details,
+                "reasoning": item.reasoning,
+                "scan_time": item.scan_time.isoformat(),
+                "user_email": item.user_email
+            })
             
         return cleaned_history
     except Exception as e:

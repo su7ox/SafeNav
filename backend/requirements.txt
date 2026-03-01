@@ -11,7 +11,8 @@ python-whois
 cryptography
 redis
 joblib
-motor
+sqlalchemy
+asyncpg
 python-jose[cryptography]
 passlib[argon2]
 python-multipart

@@ -1,13 +1,17 @@
-
 services:
-  # 1. MongoDB Database
+  # 1. PostgreSQL Database
   safenav_db:
-    image: mongo:latest
-    container_name: safenav_mongo
+    image: postgres:15-alpine
+    container_name: safenav_postgres
+    restart: always
     ports:
-      - "27017:27017"
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=safenav_user
+      - POSTGRES_PASSWORD=safenav_password
+      - POSTGRES_DB=safenav_db
     volumes:
-      - mongodb_data:/data/db
+      - postgres_data:/var/lib/postgresql/data
 
   # 2. Python Backend
   backend:
@@ -16,7 +20,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGO_URL=mongodb://safenav_db:27017
+      # Updated to use PostgreSQL connection string
+      - DATABASE_URL=postgresql+asyncpg://safenav_user:safenav_password@safenav_db:5432/safenav_db
       - SECRET_KEY=CHANGE_THIS_TO_A_SUPER_SECRET_KEY
     depends_on:
       - safenav_db
@@ -38,4 +43,4 @@ services:
       - VITE_API_URL=http://localhost:8000
 
 volumes:
-  mongodb_data:
+  postgres_data:
