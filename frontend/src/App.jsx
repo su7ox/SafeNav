@@ -47,6 +47,9 @@ const AboutUs = () => (
         <h3 className="text-white font-semibold mb-2">Developed by:</h3>
         <ul className="list-disc pl-5 space-y-1 text-slate-400">
           <li>[Manish Barti] - Lead Developer</li>
+          <li>[Rajan] - Frontend Developer</li>
+          <li>[Md. Shahan] - Backend Developer</li>
+          <li>[Aayushman Mishra] - Tester</li>
         </ul>
       </div>
     </div>

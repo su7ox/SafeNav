@@ -5,14 +5,14 @@ from app.core.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
 
 class ScanHistory(Base):
     __tablename__ = "scan_history"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     url = Column(String, index=True, nullable=False)
     risk_score = Column(Float, nullable=False)
     verdict = Column(String, nullable=False)
