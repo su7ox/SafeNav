@@ -1,81 +1,81 @@
-import httpx
-import socket
-import ipaddress
-from urllib.parse import urlparse, urljoin
+import requests
+import re
+from urllib.parse import urlparse
 
-# Module-specific constants
-MAX_REDIRECTS = 10
-TIMEOUT = 5.0
-USER_AGENT = "Mozilla/5.0 (SafeNav Security Scanner) AppleWebKit/537.36 (KHTML, like Gecko)"
+# Common Web Application Firewall (WAF) / Anti-bot server headers
+WAF_HEADERS = {"cloudflare", "sucuri", "imperva", "akamai", "ddos-guard"}
 
-def is_safe_ip(hostname: str) -> bool:
-    """Check if hostname resolves to a public IP (SSRF Protection)"""
-    try:
-        ip = socket.gethostbyname(hostname)
-        ip_obj = ipaddress.ip_address(ip)
-        return not (ip_obj.is_private or ip_obj.is_loopback)
-    except:
-        return False  # If DNS fails, it's not "safe" to connect
-
-async def trace_redirects(url: str):
-    report = {
+def trace_redirects(url: str, max_redirects: int = 10):
+    results = {
+        "initial_url": url,
         "final_url": url,
         "hop_count": 0,
+        "is_cross_domain": False,
+        "has_client_side_redirect": False,
+        "redirect_loop_detected": False,
+        "hit_captcha_or_waf": False, # ADVANCED: Anti-bot detection
         "chain": [],
-        "has_cross_domain": False,
-        "warning_flags": [],
-        "html_content": ""
+        "error": None
     }
+
+    # 1. User-Agent Masquerading
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5"
+    }
+
+    initial_domain = urlparse(url).netloc
     
-    headers = {"User-Agent": USER_AGENT}
-    current_url = url
-    visited_domains = set()
+    # Configure a session to handle the redirects automatically
+    session = requests.Session()
+    session.max_redirects = max_redirects
 
-    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=False) as client:
-        for _ in range(MAX_REDIRECTS):
-            try:
-                # 1. SSRF Check BEFORE connection
-                parsed = urlparse(current_url)
-                if not is_safe_ip(parsed.hostname):
-                    report["warning_flags"].append("Blocked: Redirected to Private IP")
-                    break
-
-                # 2. Manual Request (No Auto-Redirect)
-                response = await client.get(current_url, headers=headers)
+    try:
+        # 2. Request Execution with stream=True (Saves bandwidth & prevents Tarpits)
+        # Timeout is set strictly (connect timeout, read timeout)
+        response = session.get(url, headers=headers, allow_redirects=True, stream=True, timeout=(3.0, 5.0))
+        
+        # 3. Chain Analysis
+        if response.history:
+            results["hop_count"] = len(response.history)
+            for resp in response.history:
+                hop_url = resp.url
+                results["chain"].append(hop_url)
                 
-                # Update Chain
-                report["chain"].append(current_url)
-                visited_domains.add(parsed.netloc)
-                
-                # 3. Check for Redirect
-                if response.is_redirect:
-                    next_url = response.headers.get("location")
-                    if not next_url:
-                        break
-                        
-                    # Handle relative redirects
-                    current_url = urljoin(current_url, next_url)
-                    report["hop_count"] += 1
-                else:
-                    # Final Destination Reached
-                    report["final_url"] = str(response.url)
-                    # Only save HTML if it's the final page
-                    if response.status_code == 200:
-                        report["html_content"] = response.text[:200000] # Cap at 200KB
-                    break
+                # Cross-Domain Check
+                hop_domain = urlparse(hop_url).netloc
+                if hop_domain != initial_domain:
+                    results["is_cross_domain"] = True
                     
-            except httpx.RequestError as e:
-                report["warning_flags"].append(f"Trace Failed: {str(e)}")
-                break
-            except Exception as e:
-                 report["warning_flags"].append(f"Error: {str(e)}")
-                 break
-    
-    # Analyze Cross-Domain
-    if len(visited_domains) > 1:
-        report["has_cross_domain"] = True
+            # Add the final landing URL
+            results["final_url"] = response.url
+            results["chain"].append(response.url)
+            
+            # Final cross-domain check on the landing page
+            if urlparse(response.url).netloc != initial_domain:
+                results["is_cross_domain"] = True
+
+        # ADVANCED: Detect WAFs / CAPTCHAs blocking the scanner
+        server_header = response.headers.get("Server", "").lower()
+        if response.status_code in [403, 503] and any(waf in server_header for waf in WAF_HEADERS):
+            results["hit_captcha_or_waf"] = True
+
+        # 4. Mitigation: Detect JS & Meta-Refresh Redirects
+        # We only read the first 2048 bytes (2KB) to look for client-side redirect signatures
+        content_chunk = next(response.iter_content(chunk_size=2048), b"").decode('utf-8', errors='ignore')
         
-    if report["hop_count"] > 3:
-        report["warning_flags"].append("High Hop Count (>3)")
-        
-    return report
+        if re.search(r'http-equiv=["\']?refresh["\']?', content_chunk, re.IGNORECASE) or \
+           re.search(r'window\.location\s*=', content_chunk, re.IGNORECASE):
+            results["has_client_side_redirect"] = True
+
+    except requests.exceptions.TooManyRedirects:
+        # Loop / Black Hole Detection
+        results["redirect_loop_detected"] = True
+        results["hop_count"] = max_redirects
+    except requests.exceptions.Timeout:
+        results["error"] = "Connection Timeout (Possible Tarpit)"
+    except requests.exceptions.RequestException as e:
+        results["error"] = type(e).__name__
+
+    return results
