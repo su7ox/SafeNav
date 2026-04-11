@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import {
+  Routes,
+  Route,
+  useNavigate,
+  useLocation,
+  Link,
+} from "react-router-dom";
+import { Toaster, toast } from "react-hot-toast";
 import { scanUrl, fetchHistory } from "./services/api";
+import Dashboard from "./pages/Dashboard";
+import LandingPage from "./pages/LandingPage";
 import {
   ShieldCheck,
   AlertTriangle,
@@ -25,7 +35,9 @@ import "./App.css";
 
 const API_URL = "http://localhost:8000/api/v1";
 
-// --- ABOUT US PAGE ---
+// ─────────────────────────────────────────────
+// ABOUT US PAGE
+// ─────────────────────────────────────────────
 const AboutUs = () => (
   <div className="max-w-4xl mx-auto px-6 py-12 text-slate-300 animate-fade-in">
     <h1 className="text-4xl font-bold text-white mb-6">
@@ -56,15 +68,19 @@ const AboutUs = () => (
   </div>
 );
 
-// --- HISTORY VIEW ---
+// ─────────────────────────────────────────────
+// HISTORY VIEW  (maps to "/history")
+// ─────────────────────────────────────────────
 const HistoryView = ({ token, onRequestLogin }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!token) {
-      onRequestLogin();
+      onRequestLogin("Login Required");
+      navigate("/");
       return;
     }
 
@@ -74,8 +90,9 @@ const HistoryView = ({ token, onRequestLogin }) => {
         setHistory(data);
       } catch (err) {
         setError("Failed to load history.");
-        if (err.response && err.response.status === 401) {
-          onRequestLogin();
+        if (err.response?.status === 401) {
+          onRequestLogin("Session expired — please login again");
+          navigate("/");
         }
       } finally {
         setLoading(false);
@@ -92,6 +109,7 @@ const HistoryView = ({ token, onRequestLogin }) => {
         Loading History...
       </div>
     );
+
   if (error)
     return <div className="p-10 text-center text-rose-400">{error}</div>;
 
@@ -130,15 +148,15 @@ const HistoryView = ({ token, onRequestLogin }) => {
                       </span>
                     </td>
                     <td className="p-4 text-white font-medium max-w-[250px] sm:max-w-md md:max-w-lg lg:max-w-xl break-all">
-  <a 
-    href={scan.url} 
-    target="_blank" 
-    rel="noopener noreferrer"
-    className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
-  >
-    {scan.url}
-  </a>
-</td>
+                      <a
+                        href={scan.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                      >
+                        {scan.url}
+                      </a>
+                    </td>
                     <td className="p-4">
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
@@ -173,231 +191,9 @@ const HistoryView = ({ token, onRequestLogin }) => {
   );
 };
 
-// --- MAIN APP COMPONENT ---
-const App = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState("home");
-
-  const [token, setToken] = useState(localStorage.getItem("safenav_token"));
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMessage, setAuthMessage] = useState("Login");
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("safenav_theme");
-    if (savedTheme === "dark") {
-      setDarkMode(true);
-      document.documentElement.setAttribute("data-theme", "dark");
-    }
-  }, []);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (isMenuOpen && !e.target.closest(".nav-menu-wrapper")) {
-        setIsMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isMenuOpen]);
-
-  // Close menu on resize to desktop
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 768) setIsMenuOpen(false);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    if (newMode) {
-      document.documentElement.setAttribute("data-theme", "dark");
-      localStorage.setItem("safenav_theme", "dark");
-    } else {
-      document.documentElement.removeAttribute("data-theme");
-      localStorage.setItem("safenav_theme", "light");
-    }
-  };
-
-  const triggerAuthModal = (message = "Login") => {
-    setAuthMessage(message);
-    setShowAuthModal(true);
-  };
-
-  const handleLogin = (newToken) => {
-    setToken(newToken);
-    localStorage.setItem("safenav_token", newToken);
-    setShowAuthModal(false);
-  };
-
-  const handleLogout = () => {
-    setToken(null);
-    localStorage.removeItem("safenav_token");
-  };
-
-  const navigate = (page) => {
-    setCurrentPage(page);
-    setIsMenuOpen(false);
-  };
-
-  const navLinks = [
-    { id: "home", label: "Scanner", Icon: ShieldCheck },
-    { id: "history", label: "History", Icon: History },
-    { id: "about", label: "About", Icon: Info },
-  ];
-
-  return (
-    <div className="app-container">
-      {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
-      <nav className="nav-bar">
-        <div className="nav-content">
-          {/* Logo */}
-          <button className="nav-logo" onClick={() => navigate("home")}>
-            <div className="logo-icon-wrap">
-              <ShieldCheck size={18} className="text-white" />
-            </div>
-            <span className="logo-text">SafeNav</span>
-          </button>
-
-          {/* Desktop nav links */}
-          <div className="nav-links-desktop">
-            {navLinks.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                onClick={() => navigate(id)}
-                className={`nav-link-btn ${currentPage === id ? "active" : ""}`}
-              >
-                <Icon size={15} />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Right actions */}
-          <div className="nav-actions">
-            {/* Theme toggle */}
-            <button
-              className="icon-button theme-toggle"
-              onClick={toggleDarkMode}
-              title="Toggle theme"
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            {/* Auth button (desktop) */}
-            <div className="nav-auth-desktop">
-              {token ? (
-                <button className="auth-chip logout" onClick={handleLogout}>
-                  <LogOut size={14} /> Logout
-                </button>
-              ) : (
-                <button
-                  className="auth-chip login"
-                  onClick={() => triggerAuthModal("Login")}
-                >
-                  <Lock size={14} /> Login
-                </button>
-              )}
-            </div>
-
-            {/* Hamburger (mobile only) */}
-            <div className="nav-menu-wrapper">
-              <button
-                className={`hamburger-btn ${isMenuOpen ? "open" : ""}`}
-                onClick={() => setIsMenuOpen((o) => !o)}
-                aria-label="Toggle menu"
-                aria-expanded={isMenuOpen}
-              >
-                <span className="ham-bar bar1" />
-                <span className="ham-bar bar2" />
-                <span className="ham-bar bar3" />
-              </button>
-
-              {/* Mobile dropdown */}
-              {isMenuOpen && (
-                <div className="mobile-dropdown">
-                  <div className="mobile-dropdown-links">
-                    {navLinks.map(({ id, label, Icon }) => (
-                      <button
-                        key={id}
-                        onClick={() => navigate(id)}
-                        className={`mobile-nav-item ${currentPage === id ? "active" : ""}`}
-                      >
-                        <Icon size={17} />
-                        {label}
-                        {currentPage === id && (
-                          <span className="mobile-active-dot" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mobile-dropdown-divider" />
-                  <div className="mobile-dropdown-auth">
-                    {token ? (
-                      <button
-                        className="mobile-auth-btn logout"
-                        onClick={() => {
-                          handleLogout();
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        <LogOut size={16} /> Logout
-                      </button>
-                    ) : (
-                      <button
-                        className="mobile-auth-btn login"
-                        onClick={() => {
-                          triggerAuthModal("Login");
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        <Lock size={16} /> Login
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── MAIN CONTENT ───────────────────────────────────────── */}
-      {/* BUG FIX: history page was missing from routing */}
-      <main className="main-content">
-        {currentPage === "about" ? (
-          <AboutUs />
-        ) : currentPage === "history" ? (
-          <HistoryView
-            token={token}
-            onRequestLogin={() => triggerAuthModal("Login Required")}
-          />
-        ) : (
-          <ScannerView
-            token={token}
-            onRequestLogin={() => triggerAuthModal("Login to Scan")}
-          />
-        )}
-      </main>
-
-      {/* ── AUTH MODAL ─────────────────────────────────────────── */}
-      {showAuthModal && (
-        <AuthModal
-          title={authMessage}
-          onClose={() => setShowAuthModal(false)}
-          onLogin={handleLogin}
-        />
-      )}
-    </div>
-  );
-};
-
-// --- DETAIL CARD COMPONENT ---
-// --- DETAIL CARD COMPONENT ---
+// ─────────────────────────────────────────────
+// DETAIL CARD
+// ─────────────────────────────────────────────
 const DetailCard = ({ title, icon, data }) => (
   <div className="detail-card">
     <div className="detail-header">
@@ -406,20 +202,28 @@ const DetailCard = ({ title, icon, data }) => (
     </div>
     <div className="detail-content">
       {Object.entries(data).map(([key, value]) => {
-        // Automatically detect if the value is a URL
-        const isUrl = typeof value === 'string' && value.startsWith('http');
-        
+        const isUrl = typeof value === "string" && value.startsWith("http");
         return (
-          <div key={key} className="detail-row" style={{ alignItems: isUrl ? 'flex-start' : 'center' }}>
-            <span className="detail-label min-w-[130px] shrink-0">{key.replace(/_/g, " ")}:</span>
-            
+          <div
+            key={key}
+            className="detail-row"
+            style={{ alignItems: isUrl ? "flex-start" : "center" }}
+          >
+            <span className="detail-label min-w-[130px] shrink-0">
+              {key.replace(/_/g, " ")}:
+            </span>
+
             {isUrl ? (
-              <a 
-                href={value} 
-                target="_blank" 
+              <a
+                href={value}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:text-blue-300 hover:underline"
-                style={{ wordBreak: 'break-all', textAlign: 'right', flexGrow: 1 }}
+                style={{
+                  wordBreak: "break-all",
+                  textAlign: "right",
+                  flexGrow: 1,
+                }}
               >
                 {value}
               </a>
@@ -430,7 +234,11 @@ const DetailCard = ({ title, icon, data }) => (
                     ? "danger"
                     : ""
                 }`}
-                style={typeof value === 'string' && value.length > 25 ? { wordBreak: 'break-all', textAlign: 'right' } : {}}
+                style={
+                  typeof value === "string" && value.length > 25
+                    ? { wordBreak: "break-all", textAlign: "right" }
+                    : {}
+                }
               >
                 {value}
               </span>
@@ -442,18 +250,21 @@ const DetailCard = ({ title, icon, data }) => (
   </div>
 );
 
-// --- SCANNER VIEW COMPONENT ---
+// ─────────────────────────────────────────────
+// SCANNER VIEW  (maps to "/scan")
+// ─────────────────────────────────────────────
 const ScannerView = ({ token, onRequestLogin }) => {
   const [url, setUrl] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleScan = async (e) => {
     e.preventDefault();
     if (!url) return;
 
     if (!token) {
-      onRequestLogin();
+      onRequestLogin("Login to Scan");
       return;
     }
 
@@ -464,21 +275,22 @@ const ScannerView = ({ token, onRequestLogin }) => {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       const response = await axios.post(`${API_URL}/scan`, { url }, config);
       setResult(response.data);
+      toast.success("Scan complete!");
     } catch (err) {
       console.error(err);
-      if (err.response && err.response.status === 401) {
-        onRequestLogin();
+      if (err.response?.status === 401) {
+        onRequestLogin("Session expired — please login again");
       } else {
-        alert("Scan failed. Ensure backend is running.");
+        toast.error("Scan failed. Ensure the backend is running.");
       }
     }
+
     setLoading(false);
   };
 
   return (
     <div>
       <div className="hero-section">
-        
         <h1 className="hero-title">
           Scan links.
           <br />
@@ -619,7 +431,9 @@ const ScannerView = ({ token, onRequestLogin }) => {
   );
 };
 
-// --- AUTH MODAL COMPONENT ---
+// ─────────────────────────────────────────────
+// AUTH MODAL
+// ─────────────────────────────────────────────
 const AuthModal = ({ onClose, onLogin, title }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
@@ -630,7 +444,7 @@ const AuthModal = ({ onClose, onLogin, title }) => {
     try {
       if (isRegister) {
         await axios.post(`${API_URL}/register`, { email, password });
-        alert("Registered! Please login.");
+        toast.success("Account created! Please sign in.");
         setIsRegister(false);
       } else {
         const fd = new FormData();
@@ -638,9 +452,10 @@ const AuthModal = ({ onClose, onLogin, title }) => {
         fd.append("password", password);
         const res = await axios.post(`${API_URL}/login`, fd);
         onLogin(res.data.access_token);
+        toast.success("Logged in successfully!");
       }
-    } catch (e) {
-      alert("Authentication Failed. Check credentials.");
+    } catch {
+      toast.error("Authentication failed. Check your credentials.");
     }
   };
 
@@ -697,6 +512,275 @@ const AuthModal = ({ onClose, onLogin, title }) => {
           </span>
         </p>
       </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// ROOT APP  —  Router Shell
+// ─────────────────────────────────────────────
+const App = () => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem("safenav_token"));
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMessage, setAuthMessage] = useState("Login");
+  const [darkMode, setDarkMode] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Restore theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("safenav_theme");
+    if (savedTheme === "dark") {
+      setDarkMode(true);
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  }, []);
+
+  // Close mobile menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isMenuOpen && !e.target.closest(".nav-menu-wrapper")) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMenuOpen]);
+
+  // Close mobile menu on viewport resize to desktop width
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setIsMenuOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    if (newMode) {
+      document.documentElement.setAttribute("data-theme", "dark");
+      localStorage.setItem("safenav_theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem("safenav_theme", "light");
+    }
+  };
+
+  const triggerAuthModal = (message = "Login") => {
+    setAuthMessage(message);
+    setShowAuthModal(true);
+  };
+
+  const handleLogin = (newToken) => {
+    setToken(newToken);
+    localStorage.setItem("safenav_token", newToken);
+    setShowAuthModal(false);
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    localStorage.removeItem("safenav_token");
+    navigate("/");
+    toast("Logged out.", { icon: "👋" });
+  };
+
+  const navLinks = [
+    { path: "/", label: "Home", Icon: Home },
+    { path: "/scan", label: "Scanner", Icon: ShieldCheck },
+    { path: "/history", label: "History", Icon: History },
+    { path: "/dashboard", label: "Dashboard", Icon: Activity },
+    { path: "/about", label: "About", Icon: Info },
+  ];
+
+  const isActive = (path) =>
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(path);
+
+  return (
+    <div className="app-container">
+      {/* Global toast notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: "#1e293b",
+            color: "#e2e8f0",
+            border: "1px solid #334155",
+          },
+        }}
+      />
+
+      {/* ── NAVIGATION BAR ─────────────────────────────────── */}
+      <nav className="nav-bar">
+        <div className="nav-content">
+          {/* Logo */}
+          <button className="nav-logo" onClick={() => navigate("/")}>
+            <div className="logo-icon-wrap">
+              <ShieldCheck size={18} className="text-white" />
+            </div>
+            <span className="logo-text">SafeNav</span>
+          </button>
+
+          {/* Desktop nav links */}
+          <div className="nav-links-desktop">
+            {navLinks.map(({ path, label, Icon }) => (
+              <button
+                key={path}
+                onClick={() => navigate(path)}
+                className={`nav-link-btn ${isActive(path) ? "active" : ""}`}
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Right actions */}
+          <div className="nav-actions">
+            {/* Theme toggle */}
+            <button
+              className="icon-button theme-toggle"
+              onClick={toggleDarkMode}
+              title="Toggle theme"
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            {/* Auth button (desktop) */}
+            <div className="nav-auth-desktop">
+              {token ? (
+                <button className="auth-chip logout" onClick={handleLogout}>
+                  <LogOut size={14} /> Logout
+                </button>
+              ) : (
+                <button
+                  className="auth-chip login"
+                  onClick={() => triggerAuthModal("Login")}
+                >
+                  <Lock size={14} /> Login
+                </button>
+              )}
+            </div>
+
+            {/* Hamburger (mobile only) */}
+            <div className="nav-menu-wrapper">
+              <button
+                className={`hamburger-btn ${isMenuOpen ? "open" : ""}`}
+                onClick={() => setIsMenuOpen((o) => !o)}
+                aria-label="Toggle menu"
+                aria-expanded={isMenuOpen}
+              >
+                <span className="ham-bar bar1" />
+                <span className="ham-bar bar2" />
+                <span className="ham-bar bar3" />
+              </button>
+
+              {/* Mobile dropdown */}
+              {isMenuOpen && (
+                <div className="mobile-dropdown">
+                  <div className="mobile-dropdown-links">
+                    {navLinks.map(({ path, label, Icon }) => (
+                      <button
+                        key={path}
+                        onClick={() => {
+                          navigate(path);
+                          setIsMenuOpen(false);
+                        }}
+                        className={`mobile-nav-item ${isActive(path) ? "active" : ""}`}
+                      >
+                        <Icon size={17} />
+                        {label}
+                        {isActive(path) && (
+                          <span className="mobile-active-dot" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mobile-dropdown-divider" />
+                  <div className="mobile-dropdown-auth">
+                    {token ? (
+                      <button
+                        className="mobile-auth-btn logout"
+                        onClick={() => {
+                          handleLogout();
+                          setIsMenuOpen(false);
+                        }}
+                      >
+                        <LogOut size={16} /> Logout
+                      </button>
+                    ) : (
+                      <button
+                        className="mobile-auth-btn login"
+                        onClick={() => {
+                          triggerAuthModal("Login");
+                          setIsMenuOpen(false);
+                        }}
+                      >
+                        <Lock size={16} /> Login
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── MAIN CONTENT — Route Definitions ───────────────── */}
+      <main className="main-content">
+        <Routes>
+          <Route
+            path="/dashboard"
+            element={
+              <Dashboard token={token} onRequestLogin={triggerAuthModal} />
+            }
+          />
+          <Route
+            path="/"
+            element={<LandingPage onRequestLogin={triggerAuthModal} />}
+          />
+          <Route
+            path="/"
+            element={
+              <LandingPage token={token} onRequestLogin={triggerAuthModal} />
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <Dashboard token={token} onRequestLogin={triggerAuthModal} />
+            }
+          />
+          <Route
+            path="/scan"
+            element={
+              <ScannerView token={token} onRequestLogin={triggerAuthModal} />
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <HistoryView token={token} onRequestLogin={triggerAuthModal} />
+            }
+          />
+          <Route path="/about" element={<AboutUs />} />
+        </Routes>
+      </main>
+
+      {/* ── AUTH MODAL ──────────────────────────────────────── */}
+      {showAuthModal && (
+        <AuthModal
+          title={authMessage}
+          onClose={() => setShowAuthModal(false)}
+          onLogin={handleLogin}
+        />
+      )}
     </div>
   );
 };
