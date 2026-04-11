@@ -13,9 +13,10 @@ def trace_redirects(url: str, max_redirects: int = 10):
         "is_cross_domain": False,
         "has_client_side_redirect": False,
         "redirect_loop_detected": False,
-        "hit_captcha_or_waf": False, # ADVANCED: Anti-bot detection
+        "hit_captcha_or_waf": False, 
         "chain": [],
-        "error": None
+        "error": None,
+        "warning_flags": [] # <--- ADD THIS LINE HERE
     }
 
     # 1. User-Agent Masquerading

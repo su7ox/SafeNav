@@ -121,12 +121,12 @@ async def analyze_url(
         raise HTTPException(status_code=400, detail="URL is required")
 
     try:
-        normalized_url, hostname = normalize_url(request.url)
+        normalized_url, hostname, norm_flags = normalize_url(request.url)
         validate_target_ip(hostname) # SSRF Check
 
         # Parallel Execution
         fingerprint = identify_link_type(normalized_url, hostname)
-        trace = await trace_redirects(normalized_url)
+        trace = trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
         reputation = await check_domain_reputation(normalized_url) 
         lexical = check_lexical_risk(normalized_url, hostname)

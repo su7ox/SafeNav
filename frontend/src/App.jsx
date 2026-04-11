@@ -129,12 +129,16 @@ const HistoryView = ({ token, onRequestLogin }) => {
                         {new Date(scan.scan_time).toLocaleTimeString()}
                       </span>
                     </td>
-                    <td
-                      className="p-4 text-white font-medium max-w-xs truncate"
-                      title={scan.url}
-                    >
-                      {scan.url}
-                    </td>
+                    <td className="p-4 text-white font-medium max-w-[250px] sm:max-w-md md:max-w-lg lg:max-w-xl break-all">
+  <a 
+    href={scan.url} 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+  >
+    {scan.url}
+  </a>
+</td>
                     <td className="p-4">
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
@@ -393,6 +397,7 @@ const App = () => {
 };
 
 // --- DETAIL CARD COMPONENT ---
+// --- DETAIL CARD COMPONENT ---
 const DetailCard = ({ title, icon, data }) => (
   <div className="detail-card">
     <div className="detail-header">
@@ -400,20 +405,39 @@ const DetailCard = ({ title, icon, data }) => (
       <h3>{title}</h3>
     </div>
     <div className="detail-content">
-      {Object.entries(data).map(([key, value]) => (
-        <div key={key} className="detail-row">
-          <span className="detail-label">{key.replace(/_/g, " ")}:</span>
-          <span
-            className={`detail-value ${
-              value === "Yes" || value === "Unsafe" || value === "Expired"
-                ? "danger"
-                : ""
-            }`}
-          >
-            {value}
-          </span>
-        </div>
-      ))}
+      {Object.entries(data).map(([key, value]) => {
+        // Automatically detect if the value is a URL
+        const isUrl = typeof value === 'string' && value.startsWith('http');
+        
+        return (
+          <div key={key} className="detail-row" style={{ alignItems: isUrl ? 'flex-start' : 'center' }}>
+            <span className="detail-label min-w-[130px] shrink-0">{key.replace(/_/g, " ")}:</span>
+            
+            {isUrl ? (
+              <a 
+                href={value} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 hover:underline"
+                style={{ wordBreak: 'break-all', textAlign: 'right', flexGrow: 1 }}
+              >
+                {value}
+              </a>
+            ) : (
+              <span
+                className={`detail-value ${
+                  value === "Yes" || value === "Unsafe" || value === "Expired"
+                    ? "danger"
+                    : ""
+                }`}
+                style={typeof value === 'string' && value.length > 25 ? { wordBreak: 'break-all', textAlign: 'right' } : {}}
+              >
+                {value}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   </div>
 );
