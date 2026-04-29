@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   PieChart,
@@ -6,6 +6,10 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
 } from "recharts";
 import {
   ShieldCheck,
@@ -13,16 +17,20 @@ import {
   XOctagon,
   Search,
   History,
-  TrendingUp,
   Activity,
   Loader2,
   ArrowRight,
-  Zap,
   Lock,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  ShieldAlert,
+  FileSearch,
+  Wifi,
 } from "lucide-react";
 import { fetchHistory } from "../services/api";
 
-// ─── Font loader (inherits from LandingPage if already on page) ───────────────
+// ─── Font loader ──────────────────────────────────────────────────────────────
 const FontLoader = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500&display=swap');
@@ -46,6 +54,7 @@ const styles = `
     --danger:    #ff4d6d;
     --warn:      #ffb703;
     --safe:      #06d6a0;
+    --high:      #ff8c42;
 
     font-family: 'DM Sans', sans-serif;
     background: var(--navy);
@@ -87,13 +96,10 @@ const styles = `
     gap: 16px;
     flex-wrap: wrap;
     margin-bottom: 48px;
-
     opacity: 0;
     transform: translateY(10px);
     animation: db-rise 0.45s ease forwards;
   }
-
-  .db-header-left {}
 
   .db-eyebrow {
     font-family: 'JetBrains Mono', monospace;
@@ -209,7 +215,6 @@ const styles = `
     padding: 0 0 24px;
     display: flex;
     flex-direction: column;
-
     opacity: 0;
     transform: translateY(14px);
     animation: db-rise 0.5s ease forwards;
@@ -225,7 +230,6 @@ const styles = `
     position: relative;
   }
 
-  /* Centre label inside the donut hole */
   .db-donut-center {
     position: absolute;
     top: 50%;
@@ -252,7 +256,6 @@ const styles = `
     margin-top: 4px;
   }
 
-  /* Legend below chart */
   .db-legend {
     display: flex;
     gap: 16px;
@@ -283,7 +286,6 @@ const styles = `
     font-size: 10px;
   }
 
-  /* Custom recharts tooltip */
   .db-tooltip {
     background: var(--navy-3);
     border: 1px solid var(--border-s);
@@ -311,7 +313,6 @@ const styles = `
     flex-direction: column;
     gap: 12px;
     cursor: default;
-
     opacity: 0;
     transform: translateY(14px);
     animation: db-rise 0.5s ease forwards;
@@ -322,7 +323,6 @@ const styles = `
   .db-stat-card:nth-child(3) { animation-delay: 0.29s; }
   .db-stat-card:nth-child(4) { animation-delay: 0.36s; }
 
-  /* Accent line at top of each card */
   .db-stat-card::before {
     content: '';
     position: absolute;
@@ -353,10 +353,10 @@ const styles = `
     border: 1px solid;
   }
 
-  .c-total   .db-stat-icon-wrap { background: var(--cyan-dim);              border-color: rgba(0,229,255,0.2);  }
-  .c-threats .db-stat-icon-wrap { background: rgba(255,77,109,0.08);        border-color: rgba(255,77,109,0.2); }
-  .c-caution .db-stat-icon-wrap { background: rgba(255,183,3,0.08);         border-color: rgba(255,183,3,0.2);  }
-  .c-safe    .db-stat-icon-wrap { background: rgba(6,214,160,0.08);         border-color: rgba(6,214,160,0.2);  }
+  .c-total   .db-stat-icon-wrap { background: var(--cyan-dim);         border-color: rgba(0,229,255,0.2);  }
+  .c-threats .db-stat-icon-wrap { background: rgba(255,77,109,0.08);   border-color: rgba(255,77,109,0.2); }
+  .c-caution .db-stat-icon-wrap { background: rgba(255,183,3,0.08);    border-color: rgba(255,183,3,0.2);  }
+  .c-safe    .db-stat-icon-wrap { background: rgba(6,214,160,0.08);    border-color: rgba(6,214,160,0.2);  }
 
   .db-stat-tag {
     font-family: 'JetBrains Mono', monospace;
@@ -368,10 +368,10 @@ const styles = `
     border: 1px solid;
   }
 
-  .c-total   .db-stat-tag { color: var(--cyan);   background: var(--cyan-dim);         border-color: rgba(0,229,255,0.18); }
-  .c-threats .db-stat-tag { color: var(--danger); background: rgba(255,77,109,0.07);   border-color: rgba(255,77,109,0.18); }
-  .c-caution .db-stat-tag { color: var(--warn);   background: rgba(255,183,3,0.07);    border-color: rgba(255,183,3,0.18); }
-  .c-safe    .db-stat-tag { color: var(--safe);   background: rgba(6,214,160,0.07);    border-color: rgba(6,214,160,0.18); }
+  .c-total   .db-stat-tag { color: var(--cyan);   background: var(--cyan-dim);        border-color: rgba(0,229,255,0.18); }
+  .c-threats .db-stat-tag { color: var(--danger); background: rgba(255,77,109,0.07);  border-color: rgba(255,77,109,0.18); }
+  .c-caution .db-stat-tag { color: var(--warn);   background: rgba(255,183,3,0.07);   border-color: rgba(255,183,3,0.18); }
+  .c-safe    .db-stat-tag { color: var(--safe);   background: rgba(6,214,160,0.07);   border-color: rgba(6,214,160,0.18); }
 
   .db-stat-num {
     font-family: 'Syne', sans-serif;
@@ -388,7 +388,6 @@ const styles = `
     margin-top: -4px;
   }
 
-  /* ── Mini bar (% of total) ────────────────────── */
   .db-mini-bar-track {
     height: 3px;
     background: rgba(255,255,255,0.06);
@@ -407,6 +406,55 @@ const styles = `
   .c-caution .db-mini-bar-fill { background: var(--warn); }
   .c-safe    .db-mini-bar-fill { background: var(--safe); }
   .c-total   .db-mini-bar-fill { background: var(--cyan); }
+
+  /* ── Bottom grid: category radar + recent feed ── */
+  .db-bottom-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 900px) { .db-bottom-grid { grid-template-columns: 1fr; } }
+
+  /* ── Category breakdown radar card ───────────── */
+  .db-radar-card {
+    padding: 0 0 20px;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: db-rise 0.5s ease forwards;
+    animation-delay: 0.38s;
+  }
+
+  .db-cat-legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    padding: 0 20px;
+    margin-top: 4px;
+  }
+
+  .db-cat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .db-cat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .db-cat-score {
+    margin-left: auto;
+    font-weight: 600;
+    color: var(--text);
+  }
 
   /* ── Recent scans feed ────────────────────────── */
   .db-feed-card {
@@ -460,17 +508,21 @@ const styles = `
   }
 
   .db-feed-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 12px;
-    align-items: center;
-    padding: 13px 22px;
     border-bottom: 1px solid var(--border);
     transition: background 0.15s;
   }
 
   .db-feed-row:last-child { border-bottom: none; }
   .db-feed-row:hover { background: rgba(0,229,255,0.03); }
+
+  .db-feed-row-main {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 13px 22px;
+    cursor: pointer;
+  }
 
   .db-feed-url {
     font-family: 'JetBrains Mono', monospace;
@@ -503,9 +555,10 @@ const styles = `
     border: 1px solid;
   }
 
-  .db-feed-badge.danger  { background: rgba(255,77,109,0.1);  color: var(--danger); border-color: rgba(255,77,109,0.2); }
-  .db-feed-badge.warning { background: rgba(255,183,3,0.1);   color: var(--warn);   border-color: rgba(255,183,3,0.2); }
-  .db-feed-badge.safe    { background: rgba(6,214,160,0.08);  color: var(--safe);   border-color: rgba(6,214,160,0.18); }
+  .db-feed-badge.critical { background: rgba(255,77,109,0.12);  color: var(--danger); border-color: rgba(255,77,109,0.25); }
+  .db-feed-badge.high     { background: rgba(255,140,66,0.10);  color: var(--high);   border-color: rgba(255,140,66,0.22); }
+  .db-feed-badge.warning  { background: rgba(255,183,3,0.10);   color: var(--warn);   border-color: rgba(255,183,3,0.22); }
+  .db-feed-badge.safe     { background: rgba(6,214,160,0.08);   color: var(--safe);   border-color: rgba(6,214,160,0.18); }
 
   .db-feed-score {
     font-family: 'JetBrains Mono', monospace;
@@ -514,6 +567,127 @@ const styles = `
     color: var(--text);
     text-align: right;
     min-width: 28px;
+  }
+
+  .db-feed-expand-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s;
+  }
+
+  .db-feed-expand-btn:hover { color: var(--cyan); }
+
+  /* ── Reasoning panel (expandable) ────────────── */
+  .db-reasoning-panel {
+    border-top: 1px solid var(--border);
+    padding: 14px 22px 16px;
+    background: var(--navy-3);
+  }
+
+  .db-reasoning-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .db-reasoning-factors {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .db-factor-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text);
+    line-height: 1.45;
+  }
+
+  .db-factor-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--danger);
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  .db-factor-pts {
+    margin-left: auto;
+    white-space: nowrap;
+    font-size: 10px;
+    color: var(--danger);
+    font-weight: 600;
+    padding-left: 12px;
+  }
+
+  /* ── Category breakdown bar card ─────────────── */
+  .db-catbar-card {
+    opacity: 0;
+    transform: translateY(14px);
+    animation: db-rise 0.5s ease forwards;
+    animation-delay: 0.48s;
+    padding: 0 0 22px;
+    margin-bottom: 20px;
+  }
+
+  .db-catbar-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 16px 22px 0;
+  }
+
+  @media (max-width: 700px) { .db-catbar-grid { grid-template-columns: 1fr 1fr; } }
+
+  .db-catbar-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .db-catbar-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .db-catbar-avg {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.7rem;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: #e8f0fe;
+  }
+
+  .db-catbar-track {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .db-catbar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1.3s cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   /* ── Empty / loading states ───────────────────── */
@@ -560,14 +734,23 @@ const styles = `
   }
 `;
 
-// ─── Palette for the donut segments ──────────────────────────────────────────
+// ─── Palette for donut ────────────────────────────────────────────────────────
 const PIE_COLORS = {
-  Safe:    "#06d6a0",
-  Caution: "#ffb703",
-  Danger:  "#ff4d6d",
+  Safe:     "#06d6a0",
+  Warning:  "#ffb703",
+  High:     "#ff8c42",
+  Critical: "#ff4d6d",
 };
 
-// ─── Custom tooltip for recharts ──────────────────────────────────────────────
+// ─── Category colours ─────────────────────────────────────────────────────────
+const CAT_META = {
+  lexical:    { label: "Lexical",    color: "#00e5ff", icon: Globe },
+  ssl:        { label: "SSL/TLS",    color: "#06d6a0", icon: Lock },
+  reputation: { label: "Reputation", color: "#ff8c42", icon: ShieldAlert },
+  content:    { label: "Content",    color: "#ff4d6d", icon: FileSearch },
+};
+
+// ─── Custom tooltip ───────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const { name, value } = payload[0];
@@ -598,15 +781,20 @@ const useCountUp = (target, duration = 900) => {
   return val;
 };
 
+// ─── Animated bar width hook ──────────────────────────────────────────────────
+const useBarWidth = (pct, delay = 300) => {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setW(pct), delay);
+    return () => clearTimeout(t);
+  }, [pct]);
+  return w;
+};
+
 // ─── Single stat card ─────────────────────────────────────────────────────────
 const StatCard = ({ colorClass, icon, tag, value, label, pct }) => {
   const animated = useCountUp(value);
-  const [barWidth, setBarWidth] = useState(0);
-
-  useEffect(() => {
-    const t = setTimeout(() => setBarWidth(pct), 300);
-    return () => clearTimeout(t);
-  }, [pct]);
+  const barWidth = useBarWidth(pct);
 
   return (
     <div className={`db-card db-stat-card ${colorClass}`}>
@@ -619,24 +807,149 @@ const StatCard = ({ colorClass, icon, tag, value, label, pct }) => {
         <div className="db-stat-label">{label}</div>
       </div>
       <div className="db-mini-bar-track">
-        <div
-          className="db-mini-bar-fill"
-          style={{ width: `${barWidth}%` }}
-        />
+        <div className="db-mini-bar-fill" style={{ width: `${barWidth}%` }} />
       </div>
     </div>
   );
 };
 
+// ─── Category breakdown card (averaged across all scans) ─────────────────────
+const CategoryBreakdownCard = ({ history }) => {
+  const scansWithBreakdown = history.filter(s => s.details?.category_breakdown);
+  if (scansWithBreakdown.length === 0) return null;
+
+  const avg = (key) => {
+    const sum = scansWithBreakdown.reduce((acc, s) => acc + (s.details.category_breakdown[key] || 0), 0);
+    return Math.round(sum / scansWithBreakdown.length);
+  };
+
+  const cats = ["lexical", "ssl", "reputation", "content"];
+  const avgs = cats.map(k => ({ key: k, val: avg(k) }));
+  const maxVal = Math.max(...avgs.map(c => c.val), 1);
+
+  return (
+    <div className="db-card db-catbar-card">
+      <div className="db-card-label">// avg risk by category · {scansWithBreakdown.length} scans</div>
+      <div className="db-catbar-grid">
+        {avgs.map(({ key, val }) => {
+          const meta = CAT_META[key];
+          const Icon = meta.icon;
+          return (
+            <CatBar key={key} meta={meta} val={val} maxVal={maxVal} Icon={Icon} />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// needs to be a sub-component so hook runs per-item
+const CatBar = ({ meta, val, maxVal, Icon }) => {
+  const fillW = useBarWidth(Math.round((val / maxVal) * 100), 400);
+  return (
+    <div className="db-catbar-col">
+      <div className="db-catbar-head">
+        <Icon size={11} color={meta.color} />
+        {meta.label}
+      </div>
+      <div className="db-catbar-avg" style={{ color: meta.color }}>{val}</div>
+      <div className="db-catbar-track">
+        <div className="db-catbar-fill" style={{ width: `${fillW}%`, background: meta.color }} />
+      </div>
+    </div>
+  );
+};
+
+// ─── Feed row with expandable reasoning ───────────────────────────────────────
+const FeedRow = ({ scan, tierClass, tierLabel, tierIcon, score }) => {
+  const [expanded, setExpanded] = useState(false);
+  const reasoning = scan.reasoning || [];
+
+  // Parse factor string like "SSL cert invalid (+65)" → text + pts
+  const parseFactor = (f) => {
+    const match = f.match(/^(.*?)(\s*\(\+\d+\))$/);
+    if (match) return { text: match[1].trim(), pts: match[2].trim() };
+    return { text: f, pts: null };
+  };
+
+  return (
+    <div className="db-feed-row">
+      <div className="db-feed-row-main" onClick={() => reasoning.length > 0 && setExpanded(e => !e)}>
+        <div className="db-feed-url">
+          <a href={scan.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+            {scan.url}
+          </a>
+        </div>
+        <span className={`db-feed-badge ${tierClass}`}>
+          {tierIcon}
+          {tierLabel}
+        </span>
+        <span className="db-feed-score">{score}</span>
+        {reasoning.length > 0 && (
+          <button className="db-feed-expand-btn">
+            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+        )}
+      </div>
+
+      {expanded && reasoning.length > 0 && (
+        <div className="db-reasoning-panel">
+          <div className="db-reasoning-label">// risk factors</div>
+          <div className="db-reasoning-factors">
+            {reasoning.map((f, i) => {
+              const { text, pts } = parseFactor(f);
+              return (
+                <div className="db-factor-item" key={i}>
+                  <div className="db-factor-dot" />
+                  <span>{text}</span>
+                  {pts && <span className="db-factor-pts">{pts}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Verdict helpers (aligned to scoring.py tiers) ───────────────────────────
+// scoring.py: CRITICAL ≥75 | HIGH ≥50 | WARNING ≥25 | SAFE <25
+const tierClassOf = (score) => {
+  if (score >= 75) return "critical";
+  if (score >= 50) return "high";
+  if (score >= 25) return "warning";
+  return "safe";
+};
+
+const tierLabelOf = (scan) => {
+  // Prefer backend verdict string, normalise casing
+  if (scan.verdict) {
+    const v = scan.verdict.toUpperCase();
+    if (["CRITICAL","HIGH","WARNING","SAFE"].includes(v)) return v;
+  }
+  const s = scan.risk_score;
+  if (s >= 75) return "CRITICAL";
+  if (s >= 50) return "HIGH";
+  if (s >= 25) return "WARNING";
+  return "SAFE";
+};
+
+const tierIconOf = (score) => {
+  if (score >= 75) return <XOctagon size={10} />;
+  if (score >= 50) return <AlertTriangle size={10} />;
+  if (score >= 25) return <AlertTriangle size={10} />;
+  return <ShieldCheck size={10} />;
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 const Dashboard = ({ token, onRequestLogin }) => {
   const navigate = useNavigate();
-  const [history, setHistory]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [history, setHistory]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [activePie, setActivePie] = useState(null);
 
-  // ── Redirect if not logged in
   useEffect(() => {
     if (!token) {
       onRequestLogin("Login to view your dashboard");
@@ -644,7 +957,6 @@ const Dashboard = ({ token, onRequestLogin }) => {
     }
   }, [token]);
 
-  // ── Fetch scan history
   useEffect(() => {
     if (!token) return;
     const load = async () => {
@@ -665,118 +977,92 @@ const Dashboard = ({ token, onRequestLogin }) => {
     load();
   }, [token]);
 
-  // ── UPDATED THRESHOLD LOGIC (Matches New Backend) ──
-  const total   = history.length;
-  const threats = history.filter((s) => s.risk_score >= 50).length; // High and Critical
-  const caution = history.filter((s) => s.risk_score >= 25 && s.risk_score < 50).length; // Warning
-  const safe    = history.filter((s) => s.risk_score < 25).length; // Safe
+  // ── Thresholds aligned to scoring.py ──
+  const total    = history.length;
+  const critical = history.filter(s => s.risk_score >= 75).length;
+  const high     = history.filter(s => s.risk_score >= 50 && s.risk_score < 75).length;
+  const warning  = history.filter(s => s.risk_score >= 25 && s.risk_score < 50).length;
+  const safe     = history.filter(s => s.risk_score < 25).length;
+  const threats  = critical + high; // combined high-risk count for stat card
 
   const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
   const pieData = [
-    { name: "Safe",    value: safe    },
-    { name: "Caution", value: caution },
-    { name: "Danger",  value: threats },
-  ].filter((d) => d.value > 0);
+    { name: "Safe",     value: safe     },
+    { name: "Warning",  value: warning  },
+    { name: "High",     value: high     },
+    { name: "Critical", value: critical },
+  ].filter(d => d.value > 0);
 
-  // Most recent 6 scans for the feed
   const recent = [...history]
     .sort((a, b) => new Date(b.scan_time) - new Date(a.scan_time))
     .slice(0, 6);
 
-  // Maps backend scores perfectly to your 3 CSS states without breaking styles
-  const tierOf = (score) =>
-    score >= 50 ? "danger" : score >= 25 ? "warning" : "safe";
-
-  // Prefers backend verdict string if present, falls back to manual strings
-  const tierLabel = (scan) => {
-    if (scan.verdict) return scan.verdict.toUpperCase();
-    return scan.risk_score >= 75 ? "CRITICAL" : scan.risk_score >= 50 ? "HIGH RISK" : scan.risk_score >= 25 ? "CAUTION" : "SAFE";
-  };
-
-  const tierIcon = (score) =>
-    score >= 50
-      ? <XOctagon size={10} />
-      : score >= 25
-        ? <AlertTriangle size={10} />
-        : <ShieldCheck size={10} />;
-
-  // ── Loading state
-  if (loading) {
-    return (
-      <>
-        <FontLoader />
-        <style>{styles}</style>
-        <div className="db-root">
-          <div className="db-grid-bg" />
-          <div className="db-content">
-            <div className="db-state-box">
-              <Loader2 size={28} style={{ color: "var(--cyan)", animation: "spin 1s linear infinite" }} />
-              <span>// LOADING DASHBOARD</span>
-            </div>
+  // ── Loading
+  if (loading) return (
+    <>
+      <FontLoader />
+      <style>{styles}</style>
+      <div className="db-root">
+        <div className="db-grid-bg" />
+        <div className="db-content">
+          <div className="db-state-box">
+            <Loader2 size={28} style={{ color: "var(--cyan)", animation: "spin 1s linear infinite" }} />
+            <span>// LOADING DASHBOARD</span>
           </div>
         </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </>
-    );
-  }
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </>
+  );
 
-  // ── Error state
-  if (error) {
-    return (
-      <>
-        <FontLoader />
-        <style>{styles}</style>
-        <div className="db-root">
-          <div className="db-grid-bg" />
-          <div className="db-content">
-            <div className="db-state-box" style={{ color: "var(--danger)" }}>
-              <XOctagon size={28} />
-              <span>{error}</span>
-            </div>
+  // ── Error
+  if (error) return (
+    <>
+      <FontLoader />
+      <style>{styles}</style>
+      <div className="db-root">
+        <div className="db-grid-bg" />
+        <div className="db-content">
+          <div className="db-state-box" style={{ color: "var(--danger)" }}>
+            <XOctagon size={28} />
+            <span>{error}</span>
           </div>
         </div>
-      </>
-    );
-  }
+      </div>
+    </>
+  );
 
-  // ── No data state
-  if (total === 0) {
-    return (
-      <>
-        <FontLoader />
-        <style>{styles}</style>
-        <div className="db-root">
-          <div className="db-grid-bg" />
-          <div className="db-content">
-            {/* Header still renders */}
-            <div className="db-header">
-              <div className="db-header-left">
-                <div className="db-eyebrow">
-                  <span className="db-eyebrow-dot" />
-                  Security Overview
-                </div>
-                <h1 className="db-title">Your <span>Dashboard</span></h1>
+  // ── No data
+  if (total === 0) return (
+    <>
+      <FontLoader />
+      <style>{styles}</style>
+      <div className="db-root">
+        <div className="db-grid-bg" />
+        <div className="db-content">
+          <div className="db-header">
+            <div className="db-header-left">
+              <div className="db-eyebrow"><span className="db-eyebrow-dot" /> Security Overview</div>
+              <h1 className="db-title">Your <span>Dashboard</span></h1>
+            </div>
+          </div>
+          <div className="db-card db-state-box" style={{ minHeight: 420 }}>
+            <Lock size={32} style={{ color: "var(--cyan)", opacity: 0.5 }} />
+            <div>
+              <div style={{ color: "var(--text)", marginBottom: 6, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1.1rem" }}>
+                No scans yet
               </div>
+              <div>Run your first analysis to populate this dashboard.</div>
             </div>
-
-            <div className="db-card db-state-box" style={{ minHeight: 420 }}>
-              <Lock size={32} style={{ color: "var(--cyan)", opacity: 0.5 }} />
-              <div>
-                <div style={{ color: "var(--text)", marginBottom: 6, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1.1rem" }}>
-                  No scans yet
-                </div>
-                <div>Run your first analysis to populate this dashboard.</div>
-              </div>
-              <button className="db-no-data-cta" onClick={() => navigate("/scan")}>
-                <Search size={14} /> Analyze a URL <ArrowRight size={13} />
-              </button>
-            </div>
+            <button className="db-no-data-cta" onClick={() => navigate("/scan")}>
+              <Search size={14} /> Analyze a URL <ArrowRight size={13} />
+            </button>
           </div>
         </div>
-      </>
-    );
-  }
+      </div>
+    </>
+  );
 
   // ── Full dashboard
   return (
@@ -811,19 +1097,16 @@ const Dashboard = ({ token, onRequestLogin }) => {
           {/* ── Main: Donut | Stats 2×2 ─────────────────── */}
           <div className="db-main-grid">
 
-            {/* Donut chart card */}
+            {/* Donut chart */}
             <div className="db-card db-chart-card">
               <div className="db-card-label">// threat distribution</div>
-
               <div className="db-chart-inner">
                 <ResponsiveContainer width="100%" height={240}>
                   <PieChart>
                     <Pie
                       data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={72}
-                      outerRadius={106}
+                      cx="50%" cy="50%"
+                      innerRadius={72} outerRadius={106}
                       paddingAngle={3}
                       dataKey="value"
                       strokeWidth={0}
@@ -841,22 +1124,15 @@ const Dashboard = ({ token, onRequestLogin }) => {
                     <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
-
-                {/* Hole label */}
                 <div className="db-donut-center">
                   <div className="db-donut-big">{total}</div>
                   <div className="db-donut-sub">Total Scans</div>
                 </div>
               </div>
-
-              {/* Legend */}
               <div className="db-legend">
-                {pieData.map((d) => (
+                {pieData.map(d => (
                   <div className="db-legend-item" key={d.name}>
-                    <div
-                      className="db-legend-swatch"
-                      style={{ background: PIE_COLORS[d.name] }}
-                    />
+                    <div className="db-legend-swatch" style={{ background: PIE_COLORS[d.name] }} />
                     {d.name}
                     <span className="db-legend-count">({d.value})</span>
                   </div>
@@ -877,7 +1153,7 @@ const Dashboard = ({ token, onRequestLogin }) => {
               <StatCard
                 colorClass="c-threats"
                 icon={<XOctagon size={16} color="#ff4d6d" />}
-                tag="HIGH RISK"
+                tag="HIGH + CRITICAL"
                 value={threats}
                 label="Threats Detected"
                 pct={pct(threats)}
@@ -885,10 +1161,10 @@ const Dashboard = ({ token, onRequestLogin }) => {
               <StatCard
                 colorClass="c-caution"
                 icon={<AlertTriangle size={16} color="#ffb703" />}
-                tag="CAUTION"
-                value={caution}
+                tag="WARNING"
+                value={warning}
                 label="Flagged for Review"
-                pct={pct(caution)}
+                pct={pct(warning)}
               />
               <StatCard
                 colorClass="c-safe"
@@ -901,10 +1177,13 @@ const Dashboard = ({ token, onRequestLogin }) => {
             </div>
           </div>
 
+          {/* ── Category breakdown card ───────────────────── */}
+          <CategoryBreakdownCard history={history} />
+
           {/* ── Recent scans feed ────────────────────────── */}
           <div className="db-card db-feed-card">
             <div className="db-feed-header">
-              <span className="db-feed-title">// recent activity</span>
+              <span className="db-feed-title">// recent activity · click row to expand risk factors</span>
               <button className="db-feed-link" onClick={() => navigate("/history")}>
                 View all <ArrowRight size={11} />
               </button>
@@ -913,19 +1192,15 @@ const Dashboard = ({ token, onRequestLogin }) => {
             {recent.length === 0 ? (
               <div className="db-feed-empty">// no recent scans</div>
             ) : (
-              recent.map((scan) => (
-                <div className="db-feed-row" key={scan.id}>
-                  <div className="db-feed-url">
-                    <a href={scan.url} target="_blank" rel="noopener noreferrer">
-                      {scan.url}
-                    </a>
-                  </div>
-                  <span className={`db-feed-badge ${tierOf(scan.risk_score)}`}>
-                    {tierIcon(scan.risk_score)}
-                    {tierLabel(scan)} {/* ← Uses the new tierLabel mapped to backend string */}
-                  </span>
-                  <span className="db-feed-score">{scan.risk_score}</span>
-                </div>
+              recent.map(scan => (
+                <FeedRow
+                  key={scan.id}
+                  scan={scan}
+                  tierClass={tierClassOf(scan.risk_score)}
+                  tierLabel={tierLabelOf(scan)}
+                  tierIcon={tierIconOf(scan.risk_score)}
+                  score={scan.risk_score}
+                />
               ))
             )}
           </div>
