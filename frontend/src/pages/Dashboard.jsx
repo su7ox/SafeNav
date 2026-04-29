@@ -951,6 +951,9 @@ const Dashboard = ({ token, onRequestLogin }) => {
   const [activePie, setActivePie] = useState(null);
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'A',location:'Dashboard.jsx:useEffect(token-check)',message:'Dashboard token check',data:{hasToken:!!token,tokenType:typeof token},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!token) {
       onRequestLogin("Login to view your dashboard");
       navigate("/");
@@ -961,9 +964,18 @@ const Dashboard = ({ token, onRequestLogin }) => {
     if (!token) return;
     const load = async () => {
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'C',location:'Dashboard.jsx:load(start)',message:'Dashboard fetchHistory start',data:{hasToken:!!token,tokenLen:typeof token==='string'?token.length:null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         const data = await fetchHistory(token);
+        // #region agent log
+        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'B',location:'Dashboard.jsx:load(success)',message:'Dashboard fetchHistory success (shape)',data:{isArray:Array.isArray(data),type:typeof data,keys:(data&&typeof data==='object')?Object.keys(data).slice(0,10):null,len:Array.isArray(data)?data.length:null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setHistory(data);
       } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'C',location:'Dashboard.jsx:load(catch)',message:'Dashboard fetchHistory error',data:{name:err?.name,message:err?.message,status:err?.response?.status,code:err?.code,hasResponse:!!err?.response},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (err.response?.status === 401) {
           onRequestLogin("Session expired — please login again");
           navigate("/");
@@ -971,6 +983,9 @@ const Dashboard = ({ token, onRequestLogin }) => {
           setError("Failed to load history data.");
         }
       } finally {
+        // #region agent log
+        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'D',location:'Dashboard.jsx:load(finally)',message:'Dashboard load finally',data:{setLoadingTo:false},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setLoading(false);
       }
     };
@@ -978,6 +993,9 @@ const Dashboard = ({ token, onRequestLogin }) => {
   }, [token]);
 
   // ── Thresholds aligned to scoring.py ──
+  // #region agent log
+  fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'B',location:'Dashboard.jsx:render(calc)',message:'Dashboard render calc inputs',data:{historyIsArray:Array.isArray(history),historyLen:Array.isArray(history)?history.length:null,historyType:typeof history},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const total    = history.length;
   const critical = history.filter(s => s.risk_score >= 75).length;
   const high     = history.filter(s => s.risk_score >= 50 && s.risk_score < 75).length;

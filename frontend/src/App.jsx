@@ -201,7 +201,7 @@ const DetailCard = ({ title, icon, data }) => (
       <h3>{title}</h3>
     </div>
     <div className="detail-content">
-      {Object.entries(data).map(([key, value]) => {
+      {Object.entries(data ?? {}).map(([key, value]) => {
         const isUrl = typeof value === "string" && value.startsWith("http");
         return (
           <div
@@ -263,6 +263,10 @@ const ScannerView = ({ token, onRequestLogin }) => {
     e.preventDefault();
     if (!url) return;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S1',location:'App.jsx:ScannerView.handleScan(start)',message:'Scan start',data:{hasToken:!!token,urlLen:typeof url==='string'?url.length:null,urlStarts:typeof url==='string'?url.slice(0,40):null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (!token) {
       onRequestLogin("Login to Scan");
       return;
@@ -274,10 +278,16 @@ const ScannerView = ({ token, onRequestLogin }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       const response = await axios.post(`${API_URL}/scan`, { url }, config);
+      // #region agent log
+      fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S2',location:'App.jsx:ScannerView.handleScan(success)',message:'Scan success (shape)',data:{status:response?.status,dataType:typeof response?.data,keys:(response?.data&&typeof response.data==='object')?Object.keys(response.data).slice(0,20):null,hasReasoning:Array.isArray(response?.data?.reasoning),reasoningLen:Array.isArray(response?.data?.reasoning)?response.data.reasoning.length:null,hasDetails:!!response?.data?.details},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setResult(response.data);
       toast.success("Scan complete!");
     } catch (err) {
       console.error(err);
+      // #region agent log
+      fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S3',location:'App.jsx:ScannerView.handleScan(error)',message:'Scan error',data:{name:err?.name,message:err?.message,status:err?.response?.status,code:err?.code,hasResponse:!!err?.response},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (err.response?.status === 401) {
         onRequestLogin("Session expired — please login again");
       } else {
@@ -287,6 +297,10 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
     setLoading(false);
   };
+
+  // #region agent log
+  fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S4',location:'App.jsx:ScannerView.render',message:'Scanner render state',data:{loading,hasResult:!!result,resultType:typeof result,resultKeys:(result&&typeof result==='object')?Object.keys(result).slice(0,15):null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   return (
     <div>
@@ -324,6 +338,9 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
       {result && (
         <div className="result-container animate-fade-in-up">
+          {/* #region agent log */}
+          {fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S4',location:'App.jsx:ScannerView.result-render',message:'Rendering result block',data:{hasReasoning:Array.isArray(result?.reasoning),reasoningType:typeof result?.reasoning,hasDetails:!!result?.details,detailsType:typeof result?.details},timestamp:Date.now()})}).catch(()=>{}), null}
+          {/* #endregion */}
           {/* VERDICT HEADER */}
           <div className="result-card main-verdict">
             <div className="result-header">
