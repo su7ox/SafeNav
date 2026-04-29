@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
 
-# --- NEW SQLALCHEMY IMPORTS ---
+# --- SQLALCHEMY IMPORTS ---
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
@@ -22,9 +22,10 @@ from app.core.tracing import trace_redirects
 from app.core.ssl_check import inspect_ssl
 from app.core.reputation import check_domain_reputation
 from app.core.lexical import check_lexical_risk
-from app.core.ml_engine import predict_risk 
 from app.core.content_scan import inspect_content
-from app.utils.scoring import calculate_fusion_score
+
+# --- NEW SCORING ENGINE IMPORT ---
+from app.utils.scoring import calculate_risk_score
 
 router = APIRouter()
 
@@ -40,7 +41,6 @@ class ScanRequest(BaseModel):
     url: str
 
 # --- AUTH HELPER ---
-# Added db session dependency here!
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     from app.core.security import SECRET_KEY, ALGORITHM
     from jose import jwt, JWTError
@@ -114,7 +114,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 @router.post("/scan")
 async def analyze_url(
     request: ScanRequest, 
-    user: User = Depends(get_current_user), # 'user' is now a SQLAlchemy User model
+    user: User = Depends(get_current_user), 
     db: AsyncSession = Depends(get_db)
 ):
     if not request.url:
@@ -124,7 +124,7 @@ async def analyze_url(
         normalized_url, hostname, norm_flags = normalize_url(request.url)
         validate_target_ip(hostname) # SSRF Check
 
-        # Parallel Execution
+        # Parallel Execution (Data Gathering)
         fingerprint = identify_link_type(normalized_url, hostname)
         trace = trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
@@ -132,9 +132,6 @@ async def analyze_url(
         lexical = check_lexical_risk(normalized_url, hostname)
         content_data = inspect_content(trace.get("html_content"), normalized_url)
         
-        # ML Prediction
-        ml_result = predict_risk(normalized_url, hostname, lexical, reputation)
-
     except socket.gaierror:
         return {
             "url": request.url,
@@ -147,7 +144,7 @@ async def analyze_url(
         print(f"Scan Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    # --- CALCULATE FLAGS ---
+    # --- CALCULATE FLAGS FOR DETAILS ---
     # 1. SSL
     https_enabled = normalized_url.startswith("https")
     cert_status = "Valid" if ssl_data.get("is_valid") else "Expired/Invalid"
@@ -173,9 +170,9 @@ async def analyze_url(
 
     # 4. Link Structure
     link_cat = "Standard"
-    if fingerprint["is_shortened"]: link_cat = "Shortened"
-    elif fingerprint["is_ip_based"]: link_cat = "IP Address"
-    elif fingerprint["is_download"]: link_cat = "File/App"
+    if fingerprint.get("is_shortened"): link_cat = "Shortened"
+    elif fingerprint.get("is_ip_based"): link_cat = "IP Address"
+    elif fingerprint.get("is_download"): link_cat = "File/App"
     
     tags = fingerprint.get("tags", [])
     service_type = tags[0].title() if tags else "General Website"
@@ -190,6 +187,28 @@ async def analyze_url(
     start_domain = parsed_start.netloc
     end_domain = parsed_end.netloc
     cross_domain = start_domain != end_domain
+    
+    # --- NEW SCORING ENGINE INTEGRATION ---
+    
+    # Combine data to pass to the scoring engine, ensuring required keys exist
+    combined_scan_data = {
+        "url": normalized_url,
+        "has_ip_in_domain": fingerprint.get("is_ip_based", False),
+        "url_length": len(normalized_url),
+        "num_subdomains": len(hostname.split('.')) - 2 if len(hostname.split('.')) > 2 else 0,
+        "tld": f".{hostname.split('.')[-1]}" if "." in hostname else "",
+        "ssl_valid": ssl_data.get("is_valid", False),
+        "ssl_age_days": ssl_data.get("cert_age_days", 999),
+        "is_free_ssl_issuer": "Let's Encrypt" in ssl_data.get("issuer", "") or "ZeroSSL" in ssl_data.get("issuer", ""),
+        "is_blacklisted": reputation.get("is_blacklisted", False),
+        "domain_age_days": reputation.get("domain_age_days", 999),
+        "has_obfuscated_scripts": content_data.get("has_obfuscated_scripts", is_obfuscated),
+        **lexical,
+        **content_data
+    }
+
+    # Execute the strict ruleset
+    risk_assessment = calculate_risk_score(combined_scan_data)
     
     # --- CONSTRUCT DETAILS ---
     details = {
@@ -219,7 +238,7 @@ async def analyze_url(
             "link_category": link_cat,
             "short_provider": short_provider,
             "original_domain": start_domain,
-            "is_ip_based": "Yes" if fingerprint["is_ip_based"] else "No",
+            "is_ip_based": "Yes" if fingerprint.get("is_ip_based") else "No",
             "obfuscation": "Yes" if is_obfuscated else "No"
         },
         "redirect_analysis": {
@@ -228,20 +247,8 @@ async def analyze_url(
             "final_destination": trace.get("final_url", normalized_url),
             "redirect_loop": "No"
         },
-        "content_safety": {
-            "dynamic_content": "Yes" if content_data.get("dynamic_content_detected") else "No",
-            "status": "Analysis Limited (Static)" 
-        }
+        "category_breakdown": risk_assessment["category_breakdown"] # Added for UI charts
     }
-
-    # --- SCORING ---
-    all_warnings = (
-        fingerprint["tags"] + trace["warning_flags"] + 
-        ssl_data["warning_flags"] + reputation["warning_flags"] + 
-        lexical["warning_flags"] + content_data["warning_flags"]
-    )
-    final_score = calculate_fusion_score(ml_result["ml_probability"], all_warnings)
-    verdict = "Safe" if final_score <= 30 else "Caution" if final_score <= 69 else "High Risk"
 
     # --- SAVE TO DB ---
     scan_time = datetime.utcnow()
@@ -249,12 +256,12 @@ async def analyze_url(
     # Create the SQLAlchemy model instance
     new_scan = ScanHistory(
         url=normalized_url,
-        risk_score=final_score,
-        verdict=verdict,
+        risk_score=risk_assessment["final_score"],
+        verdict=risk_assessment["risk_level"],
         details=details,
-        reasoning=list(set(all_warnings)),
+        reasoning=risk_assessment["risk_factors"], # Replaced ml warnings with explicit rule factors
         scan_time=scan_time,
-        user_email=user.email,  # Using dot notation for the SQLAlchemy model
+        user_email=user.email,
         is_guest=False
     )
     
@@ -264,12 +271,12 @@ async def analyze_url(
 
     # --- RESPOND ---
     return {
-        "id": str(new_scan.id), # Return the new Postgres ID
+        "id": str(new_scan.id),
         "url": normalized_url,
-        "risk_score": final_score,
-        "verdict": verdict,
+        "risk_score": risk_assessment["final_score"],
+        "verdict": risk_assessment["risk_level"],
         "details": details,
-        "reasoning": list(set(all_warnings)),
+        "reasoning": risk_assessment["risk_factors"],
         "scan_time": scan_time.isoformat(),
         "user_email": user.email,
         "is_guest": False
@@ -279,7 +286,7 @@ async def analyze_url(
 async def deep_scan(request: ScanRequest, user: User = Depends(get_current_user)):
     return {
         "status": "Deep Scan Initiated",
-        "user": user.email, # Changed to dot notation
+        "user": user.email, 
         "message": "Dynamic sandbox analysis started (Phase 2 feature)"
     }
 

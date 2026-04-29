@@ -736,16 +736,6 @@ const App = () => {
       <main className="main-content">
         <Routes>
           <Route
-            path="/dashboard"
-            element={
-              <Dashboard token={token} onRequestLogin={triggerAuthModal} />
-            }
-          />
-          <Route
-            path="/"
-            element={<LandingPage onRequestLogin={triggerAuthModal} />}
-          />
-          <Route
             path="/"
             element={
               <LandingPage token={token} onRequestLogin={triggerAuthModal} />

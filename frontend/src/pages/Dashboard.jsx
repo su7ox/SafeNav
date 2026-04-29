@@ -665,11 +665,11 @@ const Dashboard = ({ token, onRequestLogin }) => {
     load();
   }, [token]);
 
-  // ── Derived stats
+  // ── UPDATED THRESHOLD LOGIC (Matches New Backend) ──
   const total   = history.length;
-  const threats = history.filter((s) => s.risk_score > 69).length;
-  const caution = history.filter((s) => s.risk_score > 30 && s.risk_score <= 69).length;
-  const safe    = history.filter((s) => s.risk_score <= 30).length;
+  const threats = history.filter((s) => s.risk_score >= 50).length; // High and Critical
+  const caution = history.filter((s) => s.risk_score >= 25 && s.risk_score < 50).length; // Warning
+  const safe    = history.filter((s) => s.risk_score < 25).length; // Safe
 
   const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
@@ -684,16 +684,20 @@ const Dashboard = ({ token, onRequestLogin }) => {
     .sort((a, b) => new Date(b.scan_time) - new Date(a.scan_time))
     .slice(0, 6);
 
+  // Maps backend scores perfectly to your 3 CSS states without breaking styles
   const tierOf = (score) =>
-    score > 69 ? "danger" : score > 30 ? "warning" : "safe";
+    score >= 50 ? "danger" : score >= 25 ? "warning" : "safe";
 
-  const tierLabel = (score) =>
-    score > 69 ? "HIGH RISK" : score > 30 ? "CAUTION" : "SAFE";
+  // Prefers backend verdict string if present, falls back to manual strings
+  const tierLabel = (scan) => {
+    if (scan.verdict) return scan.verdict.toUpperCase();
+    return scan.risk_score >= 75 ? "CRITICAL" : scan.risk_score >= 50 ? "HIGH RISK" : scan.risk_score >= 25 ? "CAUTION" : "SAFE";
+  };
 
   const tierIcon = (score) =>
-    score > 69
+    score >= 50
       ? <XOctagon size={10} />
-      : score > 30
+      : score >= 25
         ? <AlertTriangle size={10} />
         : <ShieldCheck size={10} />;
 
@@ -918,7 +922,7 @@ const Dashboard = ({ token, onRequestLogin }) => {
                   </div>
                   <span className={`db-feed-badge ${tierOf(scan.risk_score)}`}>
                     {tierIcon(scan.risk_score)}
-                    {tierLabel(scan.risk_score)}
+                    {tierLabel(scan)} {/* ← Uses the new tierLabel mapped to backend string */}
                   </span>
                   <span className="db-feed-score">{scan.risk_score}</span>
                 </div>
