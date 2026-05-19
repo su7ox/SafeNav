@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
@@ -7,19 +7,9 @@ import {
   Lock,
   Globe,
   GitBranch,
-  FileSearch,
   ArrowRight,
-  Terminal,
-  Activity,
-  AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-
-const FontLoader = () => (
-  <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500&display=swap');
-  `}</style>
-);
 
 const styles = `
   .lp-root {
@@ -36,28 +26,12 @@ const styles = `
     --warn:     #ffb703;
     --safe:     #06d6a0;
 
-    font-family: 'DM Sans', sans-serif;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     background: var(--navy);
     color: var(--text);
     min-height: 100vh;
     overflow-x: hidden;
     position: relative;
-  }
-
-  .lp-grid-bg {
-    position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background-image:
-      linear-gradient(rgba(0,229,255,0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,229,255,0.035) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
-  }
-
-  .lp-glow {
-    position: fixed; top: -10%; left: 50%; transform: translateX(-50%);
-    width: 900px; height: 500px;
-    background: radial-gradient(ellipse, rgba(0,229,255,0.07) 0%, transparent 70%);
-    pointer-events: none; z-index: 0;
   }
 
   .lp-content { position: relative; z-index: 1; }
@@ -75,7 +49,7 @@ const styles = `
 
   .lp-eyebrow {
     display: inline-flex; align-items: center; gap: 8px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--cyan); background: var(--cyan-dim);
     border: 1px solid var(--border-s); border-radius: 999px;
@@ -90,7 +64,7 @@ const styles = `
   @keyframes lp-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
 
   .lp-h1 {
-    font-family: 'Syne', sans-serif;
+    font-family: inherit;
     font-size: clamp(2.4rem, 5vw, 4rem); font-weight: 800;
     line-height: 1.08; color: #e8f0fe; margin: 0 0 24px; letter-spacing: -0.02em;
     opacity: 0; transform: translateY(16px);
@@ -125,7 +99,7 @@ const styles = `
   .lp-btn-primary {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 14px 28px; background: var(--cyan);
-    color: var(--navy); font-family: 'Syne', sans-serif;
+    color: var(--navy); font-family: inherit;
     font-weight: 700; font-size: 0.9rem; border: none;
     border-radius: 8px; cursor: pointer;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -136,7 +110,7 @@ const styles = `
   .lp-btn-secondary {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 14px 22px; background: transparent; color: var(--text);
-    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.9rem;
+    font-family: inherit; font-weight: 700; font-size: 0.9rem;
     border: 1px solid var(--border-s); border-radius: 8px; cursor: pointer;
     transition: border-color 0.18s, color 0.18s, transform 0.18s;
   }
@@ -148,65 +122,14 @@ const styles = `
   }
   .lp-stat { display: flex; flex-direction: column; gap: 2px; }
   .lp-stat-num {
-    font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 800;
+    font-family: inherit; font-size: 1.6rem; font-weight: 800;
     color: #e8f0fe; letter-spacing: -0.02em;
   }
   .lp-stat-label {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 10px;
     letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim);
   }
   .lp-stat-divider { width: 1px; background: var(--border); align-self: stretch; }
-
-  /* ── Live Widget ── */
-  .lp-widget {
-    background: var(--navy-2); border: 1px solid var(--border);
-    border-radius: 16px; overflow: hidden;
-    box-shadow: 0 0 0 1px rgba(0,229,255,0.06) inset, 0 40px 80px rgba(0,0,0,0.5);
-    opacity: 0; transform: translateY(20px) scale(0.98);
-    animation: lp-rise 0.6s ease forwards; animation-delay: 0.3s;
-  }
-  .lp-widget-header {
-    padding: 14px 18px; background: rgba(0,229,255,0.04);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 8px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--cyan); letter-spacing: 0.06em;
-  }
-  .lp-widget-dots { display: flex; gap: 5px; margin-left: auto; }
-  .lp-widget-dot { width: 8px; height: 8px; border-radius: 50%; }
-  .lp-widget-body { padding: 20px 18px; display: flex; flex-direction: column; gap: 12px; }
-
-  .lp-scan-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 12px; background: var(--navy-3);
-    border: 1px solid var(--border); border-radius: 8px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
-    animation: lp-slide-in 0.4s ease forwards; opacity: 0;
-  }
-  @keyframes lp-slide-in { from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:translateX(0)} }
-
-  .lp-scan-badge {
-    padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;
-    letter-spacing: 0.06em; white-space: nowrap; flex-shrink: 0;
-  }
-  .lp-scan-badge.danger  { background:rgba(255,77,109,0.15); color:var(--danger); border:1px solid rgba(255,77,109,0.25); }
-  .lp-scan-badge.warning { background:rgba(255,183,3,0.12);  color:var(--warn);   border:1px solid rgba(255,183,3,0.22); }
-  .lp-scan-badge.safe    { background:rgba(6,214,160,0.1);   color:var(--safe);   border:1px solid rgba(6,214,160,0.2); }
-
-  .lp-scan-url { flex:1; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .lp-scan-score { font-weight:600; flex-shrink:0; color:var(--text); }
-
-  .lp-widget-footer {
-    padding: 14px 18px; border-top: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: space-between;
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    color: var(--text-dim); letter-spacing: 0.06em;
-  }
-  .lp-live-dot { display:inline-flex; align-items:center; gap:5px; color:var(--safe); }
-  .lp-live-dot::before {
-    content:''; width:6px; height:6px; border-radius:50%; background:var(--safe);
-    animation: lp-pulse 1.4s ease-in-out infinite;
-  }
 
   /* ── HOW IT WORKS ── */
   .lp-how {
@@ -215,11 +138,11 @@ const styles = `
   @media (max-width:640px) { .lp-how { padding: 56px 20px; } }
 
   .lp-section-label {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 10px;
     letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan); margin-bottom: 14px;
   }
   .lp-section-title {
-    font-family: 'Syne', sans-serif;
+    font-family: inherit;
     font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 800;
     color: #e8f0fe; letter-spacing: -0.02em;
     max-width: 520px; line-height: 1.18; margin: 0 0 14px;
@@ -247,11 +170,11 @@ const styles = `
     display: inline-flex; align-items: center; justify-content: center;
     width: 36px; height: 36px; border-radius: 50%;
     background: var(--cyan-dim); border: 1px solid var(--border-s);
-    font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 800;
+    font-family: inherit; font-size: 0.9rem; font-weight: 800;
     color: var(--cyan); margin-bottom: 18px;
   }
   .lp-step-title {
-    font-family: 'Syne', sans-serif; font-size: 1.05rem; font-weight: 700;
+    font-family: inherit; font-size: 1.05rem; font-weight: 700;
     color: #e8f0fe; margin: 0 0 10px;
   }
   .lp-step-body { font-size: 0.9rem; color: var(--text-dim); line-height: 1.65; }
@@ -290,7 +213,7 @@ const styles = `
   }
   .lp-feature:hover .lp-feature-icon { border-color: var(--cyan); }
   .lp-feature-title {
-    font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700;
+    font-family: inherit; font-size: 1rem; font-weight: 700;
     color: #e8f0fe; margin: 0 0 8px;
   }
   .lp-feature-body { font-size: 0.88rem; color: var(--text-dim); line-height: 1.65; }
@@ -305,7 +228,7 @@ const styles = `
   @media (max-width:720px) { .lp-score-strip { grid-template-columns: 1fr; padding: 28px 24px; } }
 
   .lp-score-title {
-    font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 800;
+    font-family: inherit; font-size: 1.3rem; font-weight: 800;
     color: #e8f0fe; margin: 0 0 8px;
   }
   .lp-score-sub { font-size: 0.88rem; color: var(--text-dim); max-width: 400px; line-height: 1.65; }
@@ -318,7 +241,7 @@ const styles = `
   .lp-tier.safe    { background:rgba(6,214,160,0.07);  border-color:rgba(6,214,160,0.2);  color:var(--safe); }
   .lp-tier.warning { background:rgba(255,183,3,0.07);  border-color:rgba(255,183,3,0.2);  color:var(--warn); }
   .lp-tier.danger  { background:rgba(255,77,109,0.07); border-color:rgba(255,77,109,0.2); color:var(--danger); }
-  .lp-tier-range { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; }
+  .lp-tier-range { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:13px; font-weight:600; }
   .lp-tier-label { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; opacity:0.75; }
 
   /* ── SOCIAL PROOF ── */
@@ -352,7 +275,7 @@ const styles = `
     pointer-events: none;
   }
   .lp-cta-box h2 {
-    font-family: 'Syne', sans-serif;
+    font-family: inherit;
     font-size: clamp(1.8rem, 3.5vw, 2.8rem); font-weight: 800;
     color: #e8f0fe; margin: 0 0 16px; letter-spacing: -0.02em;
   }
@@ -362,65 +285,31 @@ const styles = `
   }
   .lp-cta-note {
     margin-top: 20px; font-size: 0.8rem; color: var(--text-dim);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
 
   .lp-divider { max-width:1200px; margin:0 auto; padding:0 32px; border:none; border-top:1px solid var(--border); }
 
-  @keyframes lp-rise { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+  /* keep landing page static: no animations/transitions */
+  .lp-root *,
+  .lp-root *::before,
+  .lp-root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* previous design used fade-in animations; ensure content is visible */
+  .lp-eyebrow,
+  .lp-h1,
+  .lp-sub,
+  .lp-trust,
+  .lp-cta-row,
+  .lp-stats {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 `;
 
-const MOCK_SCANS = [
-  { url: "paypa1-secure.verify-id.com",    score: 94,  tier: "danger"  },
-  { url: "github.com/anthropics/courses",  score: 4,   tier: "safe"    },
-  { url: "t.co/xkzj194shortlink",          score: 58,  tier: "warning" },
-  { url: "accounts.google.com/signin",     score: 6,   tier: "safe"    },
-  { url: "dl.malware-cdn.xyz/setup.exe",   score: 100, tier: "danger"  },
-];
-const TIER_LABEL = { danger: "HIGH RISK", warning: "CAUTION", safe: "SAFE" };
-
-const ThreatWidget = () => {
-  const [visible, setVisible] = useState([MOCK_SCANS[0], MOCK_SCANS[1]]);
-  const [counter, setCounter] = useState(3847);
-  const indexRef = useRef(2);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const next = MOCK_SCANS[indexRef.current % MOCK_SCANS.length];
-      indexRef.current += 1;
-      setVisible((prev) => [next, ...prev].slice(0, 4));
-      setCounter((c) => c + Math.floor(Math.random() * 3 + 1));
-    }, 2600);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="lp-widget">
-      <div className="lp-widget-header">
-        <Terminal size={13} />
-        safenav // live threat stream
-        <div className="lp-widget-dots">
-          <div className="lp-widget-dot" style={{ background: "#ff5f57" }} />
-          <div className="lp-widget-dot" style={{ background: "#febc2e" }} />
-          <div className="lp-widget-dot" style={{ background: "#28c840" }} />
-        </div>
-      </div>
-      <div className="lp-widget-body">
-        {visible.map((scan, i) => (
-          <div key={`${scan.url}-${i}`} className="lp-scan-row" style={{ animationDelay: `${i * 0.06}s` }}>
-            <span className={`lp-scan-badge ${scan.tier}`}>{TIER_LABEL[scan.tier]}</span>
-            <span className="lp-scan-url">{scan.url}</span>
-            <span className="lp-scan-score">{scan.score}</span>
-          </div>
-        ))}
-      </div>
-      <div className="lp-widget-footer">
-        <span className="lp-live-dot">ENGINE ACTIVE</span>
-        <span>{counter.toLocaleString()} SCANS TODAY</span>
-      </div>
-    </div>
-  );
-};
 
 /* ── HOW IT WORKS steps ── */
 const STEPS = [
@@ -503,11 +392,8 @@ const LandingPage = ({ onRequestLogin }) => {
 
   return (
     <>
-      <FontLoader />
       <style>{styles}</style>
       <div className="lp-root">
-        <div className="lp-grid-bg" />
-        <div className="lp-glow" />
         <div className="lp-content">
 
           {/* ── HERO ── */}
@@ -515,7 +401,7 @@ const LandingPage = ({ onRequestLogin }) => {
             <div>
               <div className="lp-eyebrow">
                 <span className="lp-eyebrow-dot" />
-                Free · No sign-up needed · Results in 3 seconds
+                Free Security Checker · Results in 3 seconds
               </div>
 
               <h1 className="lp-h1">
@@ -572,7 +458,7 @@ const LandingPage = ({ onRequestLogin }) => {
               </div>
             </div>
 
-            <ThreatWidget />
+            {/* Live threat stream removed for a simpler landing page */}
           </section>
 
           <hr className="lp-divider" />

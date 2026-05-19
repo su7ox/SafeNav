@@ -203,6 +203,26 @@ const DetailCard = ({ title, icon, data }) => (
     <div className="detail-content">
       {Object.entries(data ?? {}).map(([key, value]) => {
         const isUrl = typeof value === "string" && value.startsWith("http");
+        const normalized = String(value ?? "").trim().toLowerCase();
+        const isDanger =
+          value === true ||
+          normalized === "yes" ||
+          normalized === "unsafe" ||
+          normalized === "expired" ||
+          normalized === "detected" ||
+          normalized === "high" ||
+          normalized === "malicious" ||
+          normalized === "phishing";
+        const isSafe =
+          value === false ||
+          normalized === "no" ||
+          normalized === "safe" ||
+          normalized === "valid" ||
+          normalized === "not detected" ||
+          normalized === "clean" ||
+          normalized === "low";
+
+        const valueTone = isDanger ? "danger" : isSafe ? "safe" : "";
         return (
           <div
             key={key}
@@ -229,11 +249,7 @@ const DetailCard = ({ title, icon, data }) => (
               </a>
             ) : (
               <span
-                className={`detail-value ${
-                  value === "Yes" || value === "Unsafe" || value === "Expired"
-                    ? "danger"
-                    : ""
-                }`}
+                className={`detail-value ${valueTone}`}
                 style={
                   typeof value === "string" && value.length > 25
                     ? { wordBreak: "break-all", textAlign: "right" }
@@ -259,6 +275,42 @@ const ScannerView = ({ token, onRequestLogin }) => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const isPrivateOrInternalHost = (host) => {
+    if (!host) return false;
+    const h = String(host).trim().toLowerCase();
+    if (h === "localhost" || h.endsWith(".localhost")) return true;
+    if (h === "127.0.0.1" || h === "::1") return true;
+    if (h === "0.0.0.0") return true;
+
+    // IPv4 private, loopback, link-local, CGNAT
+    const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!ipv4) return false;
+    const o = ipv4.slice(1).map((n) => Number(n));
+    if (o.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return false;
+
+    const [a, b] = o;
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16
+    if (a === 127) return true; // 127.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
+
+    return false;
+  };
+
+  const extractHost = (input) => {
+    const raw = String(input ?? "").trim();
+    if (!raw) return "";
+    try {
+      // URL() requires a protocol; default to https for host parsing
+      const parsed = new URL(raw.includes("://") ? raw : `https://${raw}`);
+      return parsed.hostname;
+    } catch {
+      return "";
+    }
+  };
+
   const handleScan = async (e) => {
     e.preventDefault();
     if (!url) return;
@@ -269,6 +321,12 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
     if (!token) {
       onRequestLogin("Login to Scan");
+      return;
+    }
+
+    const host = extractHost(url);
+    if (isPrivateOrInternalHost(host)) {
+      toast.error("Can't scan internal/private IP addresses.");
       return;
     }
 
@@ -291,7 +349,18 @@ const ScannerView = ({ token, onRequestLogin }) => {
       if (err.response?.status === 401) {
         onRequestLogin("Session expired — please login again");
       } else {
-        toast.error("Scan failed. Ensure the backend is running.");
+        const backendMsg =
+          err?.response?.data?.detail ??
+          err?.response?.data?.message ??
+          err?.response?.data?.error ??
+          err?.message ??
+          "";
+
+        if (String(backendMsg).toLowerCase().includes("internal ip")) {
+          toast.error("Can't scan internal/private IP addresses.");
+        } else {
+          toast.error("Scan failed. Please try again.");
+        }
       }
     }
 
@@ -338,109 +407,101 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
       {result && (
         <div className="result-container animate-fade-in-up">
-          {/* #region agent log */}
-          {fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S4',location:'App.jsx:ScannerView.result-render',message:'Rendering result block',data:{hasReasoning:Array.isArray(result?.reasoning),reasoningType:typeof result?.reasoning,hasDetails:!!result?.details,detailsType:typeof result?.details},timestamp:Date.now()})}).catch(()=>{}), null}
-          {/* #endregion */}
-          {/* VERDICT HEADER */}
-          <div className="result-card main-verdict">
-            <div className="result-header">
-              <div className="header-left">
-                <div
-                  className={`verdict-icon ${
-                    result.risk_score > 69
-                      ? "danger"
-                      : result.risk_score > 30
-                        ? "warning"
-                        : "safe"
-                  }`}
-                >
-                  {result.risk_score > 69 ? (
-                    <XOctagon size={28} />
-                  ) : result.risk_score > 30 ? (
-                    <AlertTriangle size={28} />
-                  ) : (
-                    <ShieldCheck size={28} />
-                  )}
-                </div>
-                <div className="verdict-text-group">
-                  <h2
-                    className={
+          <div className="result-stack">
+            {/* VERDICT HEADER */}
+            <div className="result-card main-verdict">
+              <div className="result-header">
+                <div className="header-left">
+                  <div
+                    className={`verdict-icon ${
                       result.risk_score > 69
                         ? "danger"
                         : result.risk_score > 30
                           ? "warning"
                           : "safe"
-                    }
+                    }`}
                   >
-                    {result.verdict}
-                  </h2>
-                  <p className="target-url">Target: {result.url}</p>
+                    {result.risk_score > 69 ? (
+                      <XOctagon size={28} />
+                    ) : result.risk_score > 30 ? (
+                      <AlertTriangle size={28} />
+                    ) : (
+                      <ShieldCheck size={28} />
+                    )}
+                  </div>
+                  <div className="verdict-text-group">
+                    <h2
+                      className={
+                        result.risk_score > 69
+                          ? "danger"
+                          : result.risk_score > 30
+                            ? "warning"
+                            : "safe"
+                      }
+                    >
+                      {result.verdict}
+                    </h2>
+                    <p className="target-url">Target: {result.url}</p>
+                  </div>
+                </div>
+                <div className="risk-score-display">
+                  <div
+                    className={`risk-score-number ${
+                      result.risk_score > 69
+                        ? "score-danger"
+                        : result.risk_score > 30
+                          ? "score-warning"
+                          : "score-safe"
+                    }`}
+                  >
+                    {result.risk_score}
+                  </div>
+                  <div className="risk-score-label">Risk Score</div>
                 </div>
               </div>
-              <div className="risk-score-display">
-                <div
-                  className={`risk-score-number ${
-                    result.risk_score > 69
-                      ? "score-danger"
-                      : result.risk_score > 30
-                        ? "score-warning"
-                        : "score-safe"
-                  }`}
-                >
-                  {result.risk_score}
-                </div>
-                <div className="risk-score-label">Risk Score</div>
+            </div>
+
+            {/* AI INSIGHT */}
+            <div className="ai-insight">
+              <div className="ai-insight-header">
+                <Activity size={15} />
+                <h3>AI Security Insight</h3>
+              </div>
+              <div className="ai-insight-content">
+                {result.reasoning.map((r, i) => (
+                  <p key={i}>• {r}</p>
+                ))}
               </div>
             </div>
-          </div>
 
-          <br />
-
-          {/* AI INSIGHT */}
-          <div className="ai-insight">
-            <div className="ai-insight-header">
-              <Activity size={15} />
-              <h3>AI Security Insight</h3>
+            {/* DETAILS GRID */}
+            <div className="grid-6-layout">
+              <DetailCard
+                title="SSL & Security"
+                icon="🔐"
+                data={result.details.ssl_security}
+              />
+              <DetailCard
+                title="Phishing Checks"
+                icon="🎣"
+                data={result.details.phishing_checks}
+              />
+              <DetailCard
+                title="Domain Reputation"
+                icon="🌐"
+                data={result.details.domain_reputation}
+              />
+              <DetailCard
+                title="Link Structure"
+                icon="🔗"
+                data={result.details.link_structure}
+              />
+              <DetailCard
+                title="Redirect Analysis"
+                icon="🔄"
+                data={result.details.redirect_analysis}
+              />
             </div>
-            <div className="ai-insight-content">
-              {result.reasoning.map((r, i) => (
-                <p key={i}>• {r}</p>
-              ))}
-            </div>
-          </div>
-
-          {/* DETAILS GRID */}
-          <div className="grid-6-layout">
-            <DetailCard
-              title="SSL & Security"
-              icon="🔐"
-              data={result.details.ssl_security}
-            />
-            <DetailCard
-              title="Phishing Checks"
-              icon="🎣"
-              data={result.details.phishing_checks}
-            />
-            <DetailCard
-              title="Domain Reputation"
-              icon="🌐"
-              data={result.details.domain_reputation}
-            />
-            <DetailCard
-              title="Link Structure"
-              icon="🔗"
-              data={result.details.link_structure}
-            />
-            <DetailCard
-              title="Redirect Analysis"
-              icon="🔄"
-              data={result.details.redirect_analysis}
-            />
-            <DetailCard
-              title="Content Safety"
-              icon="🧾"
-              data={result.details.content_safety}
-            />
           </div>
         </div>
       )}
