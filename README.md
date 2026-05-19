@@ -13,7 +13,6 @@
   <!-- Backend -->
   <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white" alt="scikit-learn"/>
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL"/>
   <img src="https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis"/>
   <img src="https://img.shields.io/badge/Celery-37814A?style=flat-square&logo=celery&logoColor=white" alt="Celery"/>
@@ -23,7 +22,7 @@
 
 ---
 SafeNav is an web and link analysis platform designed to evaluate the safety of URLs, websites, and application links.  
-It performs multi-layer analysis using static inspection, reputation checks, and machine-learning–based scoring to identify potentially malicious or unsafe links.
+It performs multi-layer analysis using static inspection, reputation checks, and strict heuristic rule-based scoring to identify potentially malicious or unsafe links.
 The project is structured as a full-stack system with a React frontend and a Python-based backend, focusing on real-world web security use cases such as phishing detection, suspicious domain analysis, and unsafe content identification.
 ---
 ---
@@ -45,14 +44,11 @@ Analyzes certificate type (DV/OV/EV), issuer, age (newly issued certs under 48 h
 ### Reputation & Domain Intelligence
 Evaluates domain age via WHOIS/RDAP, suspicious TLD detection, and registrar reputation. Domains registered under one week are flagged as critical risk. Caches results via Redis to handle rate limits efficiently.
 
-### Machine Learning–Based Risk Scoring
-Uses a Random Forest classifier trained on lexical, host-based, and statistical URL features to compute a probabilistic malice score. Feature importances make the model's verdict explainable (e.g., "70% contribution from Domain Age").
-
 ### Weighted Risk Fusion Engine
-Combines the ML score with additive heuristic penalties into a single 0–100 Risk Score. Critical indicators (e.g., insecure login form, blacklist hit) immediately override to 100. Every verdict includes a human-readable reasoning list.
+Aggregates additive heuristic penalties into a single 0–100 Risk Score. Critical indicators (e.g., insecure login form, blacklist hit) immediately override to 100. Every verdict includes a human-readable reasoning list.
 
 ### Modular Detection Pipeline
-Designed with separable components for easy extension, testing, and experimentation. Each of the eight analysis modules operates independently and feeds into a central score aggregator.
+Designed with separable components for easy extension, testing, and experimentation. Each of the seven analysis modules operates independently and feeds into a central score aggregator.
 
 ---
 
@@ -61,7 +57,7 @@ Designed with separable components for easy extension, testing, and experimentat
 SafeNav is organized as a full-stack application:
 
 - **frontend/** – React-based user interface  
-- **backend/** – Python backend responsible for API handling and the eight-module static analysis pipeline
+- **backend/** – Python backend responsible for API handling and the seven-module static analysis pipeline
 
 ---
 
@@ -166,26 +162,7 @@ High entropy in a domain name indicates random character distribution — a hall
 
 ---
 
-### Module VII – Machine Learning Risk Prediction
-
-Heuristic rules catch known patterns. The ML module catches novel attacks through probabilistic pattern matching.
-
-**Feature Vector**
-
-| Feature Category | Features |
-|---|---|
-| Lexical | URL length, domain length, dot/hyphen/digit count, `@` presence, path depth |
-| Statistical | Shannon entropy of domain and path |
-| Host-Based | Domain age (days), SSL validity (binary), redirect count, is_HTTPS (binary) |
-
-**Model: Random Forest Classifier**  
-Trained on balanced datasets from PhishTank/OpenPhish (malicious) and Alexa/Tranco Top 1M (benign). Random Forest is chosen over deep learning for three reasons: it performs better on tabular URL feature data, it is resistant to overfitting with smaller datasets, and it produces **feature importance scores** — making its verdicts explainable rather than a black box.
-
-Inference uses `model.predict_proba()` to output a 0.0–1.0 probability that feeds directly into the Risk Score formula. An MLOps feedback loop retrains the model periodically on false positives/negatives reported by users and Phase 2 scans to counter model drift.
-
----
-
-### Module VIII – Static Content Inspection
+### Module VII – Static Content Inspection
 
 A lightweight HTML parser that looks for gross security violations in the page source without rendering it.
 
@@ -202,9 +179,9 @@ If `<script>` tags are prevalent but no forms are found, the system notes "Dynam
 
 ## 🧮 Risk Scoring & Fusion
 
-All eight module outputs are synthesized into a single **Risk Score (0–100)** using a Weighted Risk Fusion model:
+All seven module outputs are synthesized into a single **Risk Score (0–100)** using a Weighted Risk Fusion model:
 
-$$\text{Risk Score} = \min\left(100,\; (\alpha \cdot S_{ML}) + \sum (P_i \times W_i)\right)$$
+$$\text{Risk Score} = \min\left(100,\; \sum (P_i \times W_i)\right)$$
 
 If a **Critical Indicator** is detected (e.g., phishing blacklist hit, insecure login form), the score is immediately forced to **100**.
 
@@ -212,7 +189,6 @@ If a **Critical Indicator** is detected (e.g., phishing blacklist hit, insecure 
 |---|---|---|
 | Typosquatting Match | High | +50 |
 | Domain Age < 7 Days | High | +40 |
-| ML Probability > 80% | High | +30 |
 | Cross-Domain Redirect | Low | +15 |
 | Suspicious Keyword | Medium | +20 |
 | DV SSL Certificate | Low | +10 |
@@ -262,9 +238,8 @@ This transparency builds user trust and turns SafeNav into an educational tool, 
 
 | Technology | Role |
 |---|---|
-| ![Python](https://img.shields.io/badge/Python_3.11+-3776AB?style=flat-square&logo=python&logoColor=white) | Core language — analysis pipeline, ML, networking |
+| ![Python](https://img.shields.io/badge/Python_3.11+-3776AB?style=flat-square&logo=python&logoColor=white) | Core language — analysis pipeline, networking |
 | ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) | ASGI web framework — async-first, handles concurrent module calls |
-| ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white) | Random Forest classifier — ML risk prediction engine |
 | ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white) | WHOIS result caching (24h TTL) + Celery message broker |
 | ![Celery](https://img.shields.io/badge/Celery-37814A?style=flat-square&logo=celery&logoColor=white) | Parallel task dispatch — runs modules concurrently |
 | `BeautifulSoup (bs4)` | Static HTML parsing — insecure form detection |
@@ -277,7 +252,7 @@ This transparency builds user trust and turns SafeNav into an educational tool, 
 
 | Technology | Role |
 |---|---|
-| ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) | Containerization — encapsulates runtime, OpenSSL, ML models |
+| ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) | Containerization — encapsulates runtime and system-level dependencies like OpenSSL |
 | ![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white) | Orchestrates frontend + backend + Redis as a unified stack |
 | ![Git](https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white) | Version control & repository hosting |
 | ![VS Code](https://img.shields.io/badge/VS_Code-007ACC?style=flat-square&logo=visual-studio-code&logoColor=white) | Primary development environment |
@@ -299,14 +274,14 @@ This transparency builds user trust and turns SafeNav into an educational tool, 
 
 | Phase | Description | Status |
 |---|---|---|
-| **Phase 1** | Static Analysis Engine — 8-module URL inspection pipeline | 🔄 In Development |
+| **Phase 1** | Static Analysis Engine — 7-module URL inspection pipeline | 🔄 In Development |
 | **Phase 2** | Dynamic Analysis — full browser sandboxing & JS execution | 🔜 Planned |
 | **Phase 3** | MLOps Pipeline — automated model retraining on new threat data | 🔜 Planned |
 | **Phase 4** | Scale & Deploy — Kubernetes horizontal scaling, extended reporting | 🔜 Planned |
 
 **What's done in Phase 1:**
 - ✅ Architecture fully designed and documented
-- ✅ All 8 analysis modules specified (normalization → ML → risk fusion)
+- ✅ All 7 analysis modules specified (normalization → heuristic rules → risk fusion)
 - ✅ Weighted Risk Scoring algorithm defined
 - ✅ Docker Compose full-stack setup
 - 🔄 Module implementation in progress
