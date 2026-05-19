@@ -1,6 +1,5 @@
 fastapi[standard]
 httpx
-scikit-learn
 beautifulsoup4
 tldextract==5.1.1
 idna==3.7
@@ -9,7 +8,6 @@ dnspython
 python-whois
 cryptography
 redis
-joblib
 sqlalchemy
 asyncpg
 python-jose[cryptography]
