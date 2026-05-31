@@ -11,6 +11,7 @@ import { Toaster, toast } from "react-hot-toast";
 import { scanUrl, fetchHistory } from "./services/api";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
+import HistoryPage from './pages/History';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -68,129 +69,7 @@ const AboutUs = () => (
   </div>
 );
 
-// ─────────────────────────────────────────────
-// HISTORY VIEW  (maps to "/history")
-// ─────────────────────────────────────────────
-const HistoryView = ({ token, onRequestLogin }) => {
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!token) {
-      onRequestLogin("Login Required");
-      navigate("/");
-      return;
-    }
-
-    const loadHistory = async () => {
-      try {
-        const data = await fetchHistory(token);
-        setHistory(data);
-      } catch (err) {
-        setError("Failed to load history.");
-        if (err.response?.status === 401) {
-          onRequestLogin("Session expired — please login again");
-          navigate("/");
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadHistory();
-  }, [token]);
-
-  if (loading)
-    return (
-      <div className="p-10 text-center text-slate-400">
-        <Loader2 className="animate-spin mx-auto mb-2" />
-        Loading History...
-      </div>
-    );
-
-  if (error)
-    return <div className="p-10 text-center text-rose-400">{error}</div>;
-
-  return (
-    <div className="max-w-6xl mx-auto px-6 py-12 animate-fade-in">
-      <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
-        <History className="text-blue-500" /> Scan History
-      </h1>
-
-      {history.length === 0 ? (
-        <div className="text-center text-slate-500 bg-slate-900 p-12 rounded-xl border border-slate-800">
-          <p>No scans found. Start by analyzing a URL!</p>
-        </div>
-      ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-800 text-slate-400 text-sm uppercase tracking-wider">
-                  <th className="p-4 font-semibold">Date</th>
-                  <th className="p-4 font-semibold">URL</th>
-                  <th className="p-4 font-semibold">Verdict</th>
-                  <th className="p-4 font-semibold text-right">Score</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {history.map((scan) => (
-                  <tr
-                    key={scan.id}
-                    className="hover:bg-slate-800/50 transition-colors"
-                  >
-                    <td className="p-4 text-slate-400 text-sm whitespace-nowrap">
-                      {new Date(scan.scan_time).toLocaleDateString()}{" "}
-                      <span className="text-xs opacity-50">
-                        {new Date(scan.scan_time).toLocaleTimeString()}
-                      </span>
-                    </td>
-                    <td className="p-4 text-white font-medium max-w-[250px] sm:max-w-md md:max-w-lg lg:max-w-xl break-all">
-                      <a
-                        href={scan.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
-                      >
-                        {scan.url}
-                      </a>
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                          scan.risk_score > 69
-                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                            : scan.risk_score > 30
-                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        }`}
-                      >
-                        {scan.risk_score > 69 ? (
-                          <XOctagon size={12} />
-                        ) : scan.risk_score > 30 ? (
-                          <AlertTriangle size={12} />
-                        ) : (
-                          <ShieldCheck size={12} />
-                        )}
-                        {scan.verdict}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right font-mono text-slate-300">
-                      {scan.risk_score}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
+<Route path="/history" element={<HistoryPage token={token} onRequestLogin={onRequestLogin} />} />
 // ─────────────────────────────────────────────
 // DETAIL CARD
 // ─────────────────────────────────────────────

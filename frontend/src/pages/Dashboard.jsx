@@ -127,8 +127,8 @@ const styles = `
   }
 
   .db-title {
-    font-family: 'Syne', sans-serif;
-    font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+    font-family: sans-serif; 
+    font-size: clamp(2.0rem, 4.5vw, 3.6rem);
     font-weight: 800;
     color: #e8f0fe;
     margin: 0;
