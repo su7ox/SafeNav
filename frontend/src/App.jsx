@@ -12,6 +12,7 @@ import { scanUrl, fetchHistory } from "./services/api";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
 import HistoryPage from './pages/History';
+import AboutUs from "./pages/AboutUs";
 import {
   ShieldCheck,
   AlertTriangle,
@@ -36,40 +37,6 @@ import "./App.css";
 
 const API_URL = "http://localhost:8000/api/v1";
 
-// ─────────────────────────────────────────────
-// ABOUT US PAGE
-// ─────────────────────────────────────────────
-const AboutUs = () => (
-  <div className="max-w-4xl mx-auto px-6 py-12 text-slate-300 animate-fade-in">
-    <h1 className="text-4xl font-bold text-white mb-6">
-      About <span className="text-blue-500">SafeNav</span>
-    </h1>
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 space-y-6">
-      <p className="text-lg leading-relaxed">
-        SafeNav is a cutting-edge URL security analysis tool designed to protect
-        users from the growing threats of phishing, malware, and social
-        engineering attacks.
-      </p>
-      <p>
-        <strong>How it works:</strong> Unlike traditional blacklists, SafeNav
-        uses a hybrid approach combining static analysis, lexical feature
-        extraction, and a Machine Learning model (Random Forest) to detect
-        zero-day threats in real-time.
-      </p>
-      <div className="pt-4 border-t border-slate-800">
-        <h3 className="text-white font-semibold mb-2">Developed by:</h3>
-        <ul className="list-disc pl-5 space-y-1 text-slate-400">
-          <li>[Manish Barti] - Lead Developer</li>
-          <li>[Rajan] - Frontend Developer</li>
-          <li>[Md. Shahan] - Backend Developer</li>
-          <li>[Aayushman Mishra] - Tester</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-);
-
-<Route path="/history" element={<HistoryPage token={token} onRequestLogin={onRequestLogin} />} />
 // ─────────────────────────────────────────────
 // DETAIL CARD
 // ─────────────────────────────────────────────
@@ -194,10 +161,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
     e.preventDefault();
     if (!url) return;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S1',location:'App.jsx:ScannerView.handleScan(start)',message:'Scan start',data:{hasToken:!!token,urlLen:typeof url==='string'?url.length:null,urlStarts:typeof url==='string'?url.slice(0,40):null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     if (!token) {
       onRequestLogin("Login to Scan");
       return;
@@ -215,16 +178,10 @@ const ScannerView = ({ token, onRequestLogin }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       const response = await axios.post(`${API_URL}/scan`, { url }, config);
-      // #region agent log
-      fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S2',location:'App.jsx:ScannerView.handleScan(success)',message:'Scan success (shape)',data:{status:response?.status,dataType:typeof response?.data,keys:(response?.data&&typeof response.data==='object')?Object.keys(response.data).slice(0,20):null,hasReasoning:Array.isArray(response?.data?.reasoning),reasoningLen:Array.isArray(response?.data?.reasoning)?response.data.reasoning.length:null,hasDetails:!!response?.data?.details},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setResult(response.data);
       toast.success("Scan complete!");
     } catch (err) {
       console.error(err);
-      // #region agent log
-      fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S3',location:'App.jsx:ScannerView.handleScan(error)',message:'Scan error',data:{name:err?.name,message:err?.message,status:err?.response?.status,code:err?.code,hasResponse:!!err?.response},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (err.response?.status === 401) {
         onRequestLogin("Session expired — please login again");
       } else {
@@ -245,10 +202,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
     setLoading(false);
   };
-
-  // #region agent log
-  fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'S4',location:'App.jsx:ScannerView.render',message:'Scanner render state',data:{loading,hasResult:!!result,resultType:typeof result,resultKeys:(result&&typeof result==='object')?Object.keys(result).slice(0,15):null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   return (
     <div>
@@ -713,7 +666,7 @@ const App = () => {
           <Route
             path="/history"
             element={
-              <HistoryView token={token} onRequestLogin={triggerAuthModal} />
+              <HistoryPage token={token} onRequestLogin={triggerAuthModal} />
             }
           />
           <Route path="/about" element={<AboutUs />} />
