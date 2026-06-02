@@ -262,6 +262,7 @@ const ScannerView = ({ token, onRequestLogin }) => {
                     )}
                   </div>
                   <div className="verdict-text-group">
+                    {/* FIX 1: Support both verdict AND risk_level */}
                     <h2
                       className={
                         result.risk_score > 69
@@ -271,7 +272,7 @@ const ScannerView = ({ token, onRequestLogin }) => {
                             : "safe"
                       }
                     >
-                      {result.verdict}
+                      {result.risk_level || result.verdict}
                     </h2>
                     <p className="target-url">Target: {result.url}</p>
                   </div>
@@ -297,10 +298,11 @@ const ScannerView = ({ token, onRequestLogin }) => {
             <div className="ai-insight">
               <div className="ai-insight-header">
                 <Activity size={15} />
-                <h3>AI Security Insight</h3>
+                <h3> Security Insight</h3>
               </div>
               <div className="ai-insight-content">
-                {result.reasoning.map((r, i) => (
+                {/* FIX 2: Fallback to an empty array so map() NEVER crashes */}
+                {(result.risk_factors || result.reasoning || []).map((r, i) => (
                   <p key={i}>• {r}</p>
                 ))}
               </div>

@@ -1,5 +1,3 @@
-# backend/app/utils/scoring.py
-
 def calculate_risk_score(scan_results: dict) -> dict:
     """
     Calculates a highly granular risk score from 0-100 based on strict heuristics.
@@ -50,31 +48,63 @@ def calculate_risk_score(scan_results: dict) -> dict:
         add_risk(25, f"Highly abused Top-Level Domain ({scan_results.get('tld')})", "lexical")
 
 
-    # --- 2. SSL/TLS Checks ---
-    if not scan_results.get('ssl_valid', True):
+    # --- 2. ADVANCED SSL/TLS Checks ---
+    # Fallback to flattened keys if 'ssl' dict isn't explicitly nested
+    ssl_data = scan_results.get('ssl', scan_results)
+    ssl_warnings = ssl_data.get('warning_flags', [])
+    
+    # Core Validity
+    if not ssl_data.get('is_valid', True):
         add_risk(65, "Invalid, expired, or missing SSL certificate", "ssl")
-    else:
-        ssl_age = scan_results.get('ssl_age_days', 999)
-        if ssl_age < 14:
-            add_risk(30, "SSL certificate is extremely new (< 14 days old)", "ssl")
-        elif ssl_age < 60:
-            add_risk(10, "SSL certificate is relatively new (< 60 days old)", "ssl")
-            
-        if scan_results.get('is_free_ssl_issuer', False):
-            add_risk(5, "Domain uses a free SSL issuer (common in temporary phishing sites)", "ssl")
+        
+    if ssl_data.get('is_self_signed', False):
+        add_risk(65, "Self-signed certificate detected (Highly suspicious for public sites)", "ssl")
+
+    # Age Heuristics
+    ssl_age = ssl_data.get('cert_age_days', 999)
+    if ssl_age < 2:
+        add_risk(40, "SSL certificate is incredibly new (< 48 hours old)", "ssl")
+    elif ssl_age < 14:
+        add_risk(25, "SSL certificate is very new (< 14 days old)", "ssl")
+    elif ssl_age < 60:
+        add_risk(10, "SSL certificate is relatively new (< 60 days old)", "ssl")
+
+    # Deep Inspection (Using the new warning_flags from ssl_check.py)
+    if any("Automated/Free DV" in flag for flag in ssl_warnings):
+        add_risk(10, "Domain uses a free/automated SSL issuer (common in phishing)", "ssl")
+        
+    if any("Deprecated/Weak TLS" in flag for flag in ssl_warnings):
+        add_risk(25, "Server uses deprecated or weak TLS protocol", "ssl")
+        
+    if any("Weak Cipher" in flag for flag in ssl_warnings):
+        add_risk(15, "Server negotiated a weak cipher suite", "ssl")
+
+    if any("phishing kit signal" in flag for flag in ssl_warnings):
+        add_risk(35, "Suspicious Subject Alternative Name (SAN) pattern (Phishing kit signal)", "ssl")
+        
+    if any("High number of SANs" in flag for flag in ssl_warnings) and not any("phishing kit signal" in flag for flag in ssl_warnings):
+         add_risk(10, "High number of domains packed onto a single certificate", "ssl")
+
+    if any("No CT Log Entries" in flag for flag in ssl_warnings):
+        add_risk(25, "Certificate Transparency logs missing (Hidden/Suspicious certificate)", "ssl")
+        
+    if any("Abnormally Short" in flag for flag in ssl_warnings):
+        add_risk(15, "Certificate lifespan is abnormally short", "ssl")
 
 
     # --- 3. Reputation & WHOIS Checks ---
     if scan_results.get('is_blacklisted', False):
         # Immediate maximum penalty if flagged by threat intelligence
         add_risk(100, "Domain is explicitly flagged on a threat blacklist", "reputation")
+    
+    domain_age = scan_results.get('domain_age_days')
+    if domain_age is None:
+        domain_age = 999 # If age is unknown, assume it's very new to be cautious
         
-    domain_age = scan_results.get('domain_age_days', 999)
     if domain_age < 30:
         add_risk(45, "Domain was registered very recently (< 30 days ago)", "reputation")
     elif domain_age < 90:
         add_risk(20, "Domain is relatively new (< 90 days ago)", "reputation")
-
 
     # --- 4. Content / Fingerprinting ---
     if scan_results.get('has_obfuscated_scripts', False):

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
 from app.core.database import get_db
-from app.core.models import User, ScanHistory
+from app.core.models import User, ScanHistory, ScanResponseSchema # (Make sure you imported your schemas)
 
 from app.core.security import verify_password, get_password_hash, create_access_token
 
@@ -136,7 +136,7 @@ async def analyze_url(
         return {
             "url": request.url,
             "risk_score": 0,
-            "verdict": "Unreachable",
+            "risk_level": "Unreachable",
             "details": {"error": "Domain does not exist"},
             "scan_time": datetime.utcnow().isoformat()
         }
@@ -145,18 +145,14 @@ async def analyze_url(
         raise HTTPException(status_code=500, detail=str(e))
 
     # --- CALCULATE FLAGS FOR DETAILS ---
-    # 1. SSL
-    https_enabled = normalized_url.startswith("https")
-    cert_status = "Valid" if ssl_data.get("is_valid") else "Expired/Invalid"
-    if not https_enabled: cert_status = "None"
     
-    # 2. Phishing
+    # 1. Phishing
     is_typosquat = lexical.get("is_typosquat", False)
     brand_detected = lexical.get("target", "None") if is_typosquat else "None"
     suspicious_kw = any(x in normalized_url for x in ["login", "verify", "update", "secure", "bank"])
     is_homograph = "xn--" in hostname 
 
-    # 3. Reputation
+    # 2. Reputation
     dom_age = reputation.get("domain_age_days")
     if dom_age is None:
         dom_status = "Unknown"
@@ -168,7 +164,7 @@ async def analyze_url(
     is_sus_tld = reputation.get("is_suspicious_tld", False)
     whois_privacy = True 
 
-    # 4. Link Structure
+    # 3. Link Structure
     link_cat = "Standard"
     if fingerprint.get("is_shortened"): link_cat = "Shortened"
     elif fingerprint.get("is_ip_based"): link_cat = "IP Address"
@@ -180,7 +176,7 @@ async def analyze_url(
     short_provider = short_provider.title() if short_provider else "None"
     is_obfuscated = "%" in request.url or "0x" in request.url
 
-    # 5. Redirects
+    # 4. Redirects
     hops = trace.get("hop_count", 0)
     parsed_start = urlparse(normalized_url)
     parsed_end = urlparse(trace.get("final_url", ""))
@@ -190,16 +186,16 @@ async def analyze_url(
     
     # --- NEW SCORING ENGINE INTEGRATION ---
     
-    # Combine data to pass to the scoring engine, ensuring required keys exist
     combined_scan_data = {
         "url": normalized_url,
         "has_ip_in_domain": fingerprint.get("is_ip_based", False),
         "url_length": len(normalized_url),
         "num_subdomains": len(hostname.split('.')) - 2 if len(hostname.split('.')) > 2 else 0,
         "tld": f".{hostname.split('.')[-1]}" if "." in hostname else "",
-        "ssl_valid": ssl_data.get("is_valid", False),
-        "ssl_age_days": ssl_data.get("cert_age_days", 999),
-        "is_free_ssl_issuer": "Let's Encrypt" in ssl_data.get("issuer", "") or "ZeroSSL" in ssl_data.get("issuer", ""),
+        
+        # Pass the ENTIRE ssl_data dictionary so scoring.py can read the new warning_flags
+        "ssl": ssl_data,
+        
         "is_blacklisted": reputation.get("is_blacklisted", False),
         "domain_age_days": reputation.get("domain_age_days", 999),
         "has_obfuscated_scripts": content_data.get("has_obfuscated_scripts", is_obfuscated),
@@ -212,13 +208,9 @@ async def analyze_url(
     
     # --- CONSTRUCT DETAILS ---
     details = {
-        "ssl_security": {
-            "https_enabled": "Yes" if https_enabled else "No",
-            "cert_validity": cert_status,
-            "validation_type": ssl_data.get("validation_type", "Unknown"),
-            "issuer": ssl_data.get("issuer", "Unknown"),
-            "cert_age": f"{ssl_data.get('cert_age_days', 0)} days"
-        },
+        # Embed the full advanced SSL dictionary directly into the details
+        "ssl_security": ssl_data, 
+        
         "phishing_checks": {
             "typosquatting": "Yes" if is_typosquat else "No",
             "brand_similarity": brand_detected.title(),
@@ -246,20 +238,23 @@ async def analyze_url(
             "cross_domain": "Yes" if cross_domain else "No",
             "final_destination": trace.get("final_url", normalized_url),
             "redirect_loop": "No"
-        },
-        "category_breakdown": risk_assessment["category_breakdown"] # Added for UI charts
+        }
     }
 
     # --- SAVE TO DB ---
     scan_time = datetime.utcnow()
     
+    # Check if there is an SSL issue for quick database filtering
+    has_ssl_issue = not ssl_data.get("is_valid", True) or len(ssl_data.get("warning_flags", [])) > 0
+    
     # Create the SQLAlchemy model instance
     new_scan = ScanHistory(
         url=normalized_url,
         risk_score=risk_assessment["final_score"],
-        verdict=risk_assessment["risk_level"],
+        risk_level=risk_assessment["risk_level"], # Updated from 'verdict'
+        has_ssl_issue=has_ssl_issue,              # New column from models.py
         details=details,
-        reasoning=risk_assessment["risk_factors"], # Replaced ml warnings with explicit rule factors
+        reasoning=risk_assessment["risk_factors"], 
         scan_time=scan_time,
         user_email=user.email,
         is_guest=False
@@ -267,16 +262,18 @@ async def analyze_url(
     
     db.add(new_scan)
     await db.commit()
-    await db.refresh(new_scan) # Fetches the newly generated integer ID
+    await db.refresh(new_scan) 
 
     # --- RESPOND ---
     return {
         "id": str(new_scan.id),
         "url": normalized_url,
         "risk_score": risk_assessment["final_score"],
-        "verdict": risk_assessment["risk_level"],
+        "risk_level": risk_assessment["risk_level"], # Updated from 'verdict'
         "details": details,
-        "reasoning": risk_assessment["risk_factors"],
+        "category_breakdown": risk_assessment["category_breakdown"], # Unpacked for React charts
+        "risk_factors": risk_assessment["risk_factors"],
+        "ssl_details": ssl_data, # Top-level exposure for the React Frontend
         "scan_time": scan_time.isoformat(),
         "user_email": user.email,
         "is_guest": False
@@ -314,7 +311,8 @@ async def get_scan_history(user: User = Depends(get_current_user), db: AsyncSess
                 "id": str(item.id),
                 "url": item.url,
                 "risk_score": item.risk_score,
-                "verdict": item.verdict,
+                "risk_level": item.risk_level, # Updated from 'verdict'
+                "has_ssl_issue": item.has_ssl_issue, # Added the new flag
                 "details": item.details,
                 "reasoning": item.reasoning,
                 "scan_time": item.scan_time.isoformat(),
