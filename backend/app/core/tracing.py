@@ -1,5 +1,6 @@
 import requests
 import re
+import socket
 from urllib.parse import urlparse
 
 # Common Web Application Firewall (WAF) / Anti-bot server headers
@@ -16,6 +17,7 @@ def trace_redirects(url: str, max_redirects: int = 10):
         "hit_captcha_or_waf": False, 
         "chain": [],
         "error": None,
+        "hop_ips": [],
         "warning_flags": []
     }
 
@@ -47,7 +49,13 @@ def trace_redirects(url: str, max_redirects: int = 10):
                 hop_domain = urlparse(hop_url).netloc
                 if hop_domain != initial_domain:
                     results["is_cross_domain"] = True
-                    
+                try:
+                    hop_ip = socket.gethostbyname(hop_domain.split(':')[0]) # Split in case of ports
+                    if hop_ip not in results["hop_ips"]:
+                        results["hop_ips"].append(hop_ip)
+                except Exception:
+                    pass    
+            
             # Add the final landing URL
             results["final_url"] = response.url
             results["chain"].append(response.url)
@@ -55,6 +63,16 @@ def trace_redirects(url: str, max_redirects: int = 10):
             # Final cross-domain check on the landing page
             if urlparse(response.url).netloc != initial_domain:
                 results["is_cross_domain"] = True
+
+        # --- ALWAYS CAPTURE FINAL DESTINATION IP ---
+        # Runs whether there were redirects or not
+        try:
+            final_domain = urlparse(response.url).netloc
+            final_ip = socket.gethostbyname(final_domain.split(':')[0])
+            if final_ip not in results["hop_ips"]:
+                results["hop_ips"].append(final_ip)
+        except Exception:
+            pass
 
         # ADVANCED: Detect WAFs / CAPTCHAs blocking the scanner
         server_header = response.headers.get("Server", "").lower()

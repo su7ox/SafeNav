@@ -1,3 +1,42 @@
+import ipaddress
+import urllib.parse
+
+# Comprehensive list of well-known, safe public IPs 
+# (Major DNS resolvers, security filters, and Anycast services)
+KNOWN_SAFE_IPS = {
+    # --- Cloudflare ---
+    "1.1.1.1", "1.0.0.1", "1.1.1.2", "1.0.0.2", "1.1.1.3", "1.0.0.3",
+    "2606:4700:4700::1111", "2606:4700:4700::1001",
+    # --- Google ---
+    "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844",
+    # --- Quad9 ---
+    "9.9.9.9", "149.112.112.112", "9.9.9.10", "149.112.112.10", 
+    "9.9.9.11", "149.112.114.114", "2620:fe::fe", "2620:fe::9",
+    # --- OpenDNS (Cisco) ---
+    "208.67.222.222", "208.67.220.220", "208.67.222.123", "208.67.220.123",
+    "2620:119:35::35", "2620:119:53::53",
+    # --- AdGuard ---
+    "94.140.14.14", "94.140.15.15", "94.140.14.15", "94.140.15.16",
+    # --- CleanBrowsing ---
+    "185.228.168.9", "185.228.169.9", "185.228.168.168", "185.228.169.168",
+    # --- NextDNS & Control D ---
+    "45.90.28.0", "45.90.30.0", "76.76.2.0", "76.76.10.0"
+}
+
+def evaluate_ip_risk(hostname: str) -> dict:
+    """Evaluates the risk of a raw IP address being used as a hostname."""
+    if not hostname:
+        return {"score": 0, "msg": None}
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if str(ip) in KNOWN_SAFE_IPS:
+            return {"score": 0, "msg": None}
+        if ip.is_private or ip.is_loopback or ip.is_link_local:
+            return {"score": 10, "msg": "Local or private network IP address used"}
+        return {"score": 45, "msg": "Public IP address used instead of a domain name (Common in malware/phishing)"}
+    except ValueError:
+        return {"score": 0, "msg": None}
+
 def calculate_risk_score(scan_results: dict) -> dict:
     total_score = 0
     risk_factors = []
@@ -10,7 +49,6 @@ def calculate_risk_score(scan_results: dict) -> dict:
     }
     
     def add_risk(points: int, message: str, category: str):
-        """Helper function to apply penalties and log the reason."""
         nonlocal total_score
         total_score += points
         category_scores[category] += points
@@ -23,8 +61,11 @@ def calculate_risk_score(scan_results: dict) -> dict:
     # --- 1. Lexical / URL Checks ---
     url = scan_results.get('url', '').lower()
     
-    if scan_results.get('has_ip_in_domain', False):
-        add_risk(45, "IP address used instead of a domain name", "lexical")
+    # Contextual IP Evaluation
+    hostname = urllib.parse.urlparse(url).hostname or ""
+    ip_eval = evaluate_ip_risk(hostname)
+    if ip_eval["score"] > 0:
+        add_risk(ip_eval["score"], ip_eval["msg"], "lexical")
         
     url_len = scan_results.get('url_length', 0)
     if url_len > 100:
@@ -50,7 +91,6 @@ def calculate_risk_score(scan_results: dict) -> dict:
     ssl_data = scan_results.get('ssl', scan_results)
     ssl_warnings = ssl_data.get('warning_flags', [])
 
-    # Core Validity
     if not ssl_data.get('is_valid', True):
         add_risk(65, "Invalid, expired, or missing SSL certificate", "ssl")    
     if ssl_data.get('is_self_signed', False):
@@ -61,9 +101,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
         add_risk(40, "SSL certificate is incredibly new (< 48 hours old)", "ssl")
     elif ssl_age < 14:
         add_risk(25, "SSL certificate is very new (< 14 days old)", "ssl")
-    # REMOVED: < 60 days check (Too noisy for modern auto-renewing certs)
 
-    # Deep Inspection 
     if any("Automated/Free DV" in flag for flag in ssl_warnings):
         add_risk(10, "Domain uses a free/automated SSL issuer (common in phishing)", "ssl")    
     if any("Deprecated/Weak TLS" in flag for flag in ssl_warnings):
@@ -80,7 +118,10 @@ def calculate_risk_score(scan_results: dict) -> dict:
          add_risk(10, "High number of domains packed onto a single certificate", "ssl")
          
     if any("No CT Log Entries" in flag for flag in ssl_warnings):
-        add_risk(25, "Certificate Transparency logs missing (Hidden/Suspicious certificate)", "ssl")    
+        # Guard: crt.sh database lag
+        if not is_major and ssl_age >= 2:
+            add_risk(15, "CT logs missing (Hidden cert or crt.sh API lag)", "ssl")    
+            
     if any("Abnormally Short" in flag for flag in ssl_warnings):
         add_risk(15, "Certificate lifespan is abnormally short", "ssl")
         
@@ -91,7 +132,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
     ip_warnings = ip_data.get("warning_flags", [])
  
     if any("VPN / Proxy" in f for f in ip_warnings):
-        if not is_major: # Guard: Don't penalize Anycast/CDN IPs
+        if not is_major: 
             add_risk(30, "IP flagged as VPN / Proxy / Tor Exit Node", "reputation")
  
     if any("High-Risk Country" in f for f in ip_warnings):
@@ -103,13 +144,12 @@ def calculate_risk_score(scan_results: dict) -> dict:
     if ip_data.get("country_mismatch", False):
         add_risk(15, "Domain registered in a different country than its hosting location", "reputation")
  
-    # Absence of IP resolution = domain doesn't exist or DNS is broken
     if ip_data and ip_data.get("ip_address") is None:
         add_risk(20, "Could not resolve domain to an IP address (DNS failure or non-existent domain)", "reputation")
 
     domain_age = scan_results.get('domain_age_days')
     if domain_age is None:
-        domain_age = 999 # If age is unknown, assume it's very new to be cautious
+        domain_age = 999 
         
     if domain_age < 30:
         add_risk(45, "Domain was registered very recently (< 30 days ago)", "reputation")
@@ -132,7 +172,6 @@ def calculate_risk_score(scan_results: dict) -> dict:
     # --- Final Score Normalization ---
     final_score = min(total_score, 100)
     
-    # Determine Granular Risk Tier
     if final_score >= 75:
         risk_level = "CRITICAL"
     elif final_score >= 50:

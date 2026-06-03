@@ -200,7 +200,7 @@ def inspect_ssl(hostname: str):
         "is_valid": False,
         "is_https": False,
         "issuer": "Unknown",
-
+        "resolved_ip": None,
         # Dates
         "cert_age_days": 0,
         "days_to_expire": 0,
@@ -249,6 +249,7 @@ def inspect_ssl(hostname: str):
 
     try:
         with socket.create_connection((hostname, 443), timeout=5) as sock:
+            report["resolved_ip"] = sock.getpeername()[0]
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
                 cert = ssock.getpeercert()
                 der_cert = ssock.getpeercert(binary_form=True)
