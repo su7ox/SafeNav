@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { ResultsGrid } from "./components/ResultsGrid";
 import {
   Routes,
   Route,
@@ -307,38 +308,7 @@ const ScannerView = ({ token, onRequestLogin }) => {
             </div>
 
             {/* DETAILS GRID */}
-            <div className="grid-6-layout">
-              <DetailCard
-                title="SSL & Security"
-                icon="🔐"
-                data={result.details.ssl_security}
-              />
-              <DetailCard
-                title="Phishing Checks"
-                icon="🎣"
-                data={result.details.phishing_checks}
-              />
-              <DetailCard
-                title="Domain Reputation"
-                icon="🌐"
-                data={result.details.domain_reputation}
-              />
-              <DetailCard
-                title="IP Intelligence"
-                icon="🌍"
-                data={result.details.ip_intelligence}
-              />
-              <DetailCard
-                title="Link Structure"
-                icon="🔗"
-                data={result.details.link_structure}
-              />
-              <DetailCard
-                title="Redirect Analysis"
-                icon="🔄"
-                data={result.details.redirect_analysis}
-              />
-            </div>
+            <ResultsGrid results={result} />
           </div>
         </div>
       )}
