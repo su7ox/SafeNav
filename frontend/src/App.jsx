@@ -149,7 +149,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
     const raw = String(input ?? "").trim();
     if (!raw) return "";
     try {
-      // URL() requires a protocol; default to https for host parsing
       const parsed = new URL(raw.includes("://") ? raw : `https://${raw}`);
       return parsed.hostname;
     } catch {
@@ -301,7 +300,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
                 <h3> Security Insight</h3>
               </div>
               <div className="ai-insight-content">
-                {/* FIX 2: Fallback to an empty array so map() NEVER crashes */}
                 {(result.risk_factors || result.reasoning || []).map((r, i) => (
                   <p key={i}>• {r}</p>
                 ))}
@@ -324,6 +322,11 @@ const ScannerView = ({ token, onRequestLogin }) => {
                 title="Domain Reputation"
                 icon="🌐"
                 data={result.details.domain_reputation}
+              />
+              <DetailCard
+                title="IP Intelligence"
+                icon="🌍"
+                data={result.details.ip_intelligence}
               />
               <DetailCard
                 title="Link Structure"

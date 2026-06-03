@@ -39,7 +39,7 @@ TRUSTED_CERTIFICATE_AUTHORITIES = [
     "D-TRUST", "Actalis", "Trustwave", "Network Solutions",
 ]
 
-# Free/automated DV issuers — flagged for risk scoring
+# Free/automated DV issuers — metadata only, NOT a standalone warning flag
 FREE_DV_PROVIDERS = [
     "R3", "Let's Encrypt", "cPanel", "ZeroSSL", "TrustAsia",
     "Cloudflare", "Google Trust Services", "GTS",
@@ -199,38 +199,43 @@ def inspect_ssl(hostname: str):
         # Dates
         "cert_age_days": 0,
         "days_to_expire": 0,
-        "cert_total_lifespan_days": 0,        # NEW: total cert lifespan
+        "cert_total_lifespan_days": 0,
 
         # Protocol
         "tls_version": "Unknown",
-        "cipher_suite": "Unknown",            # NEW: cipher suite name
-        "cipher_bits": 0,                     # NEW: cipher key bits
+        "cipher_suite": "Unknown",
+        "cipher_bits": 0,
 
         # Cert identity
         "validation_type": "Unknown",
         "is_self_signed": False,
-        "is_wildcard": False,                 # NEW: wildcard cert flag
-        "san_count": 0,                       # NEW: total SAN count
+        "is_wildcard": False,
+        "san_count": 0,
 
         # Public key
-        "key_type": "Unknown",                # NEW: RSA / EC / DSA
-        "key_bits": 0,                        # NEW: key size in bits
+        "key_type": "Unknown",
+        "key_bits": 0,
+
+        # Free DV metadata — reported as facts, NOT warning flags
+        # Scoring engine uses these to combine with other signals
+        "is_free_dv": False,
+        "cert_is_new": False,           # True if age < 30 days
 
         # HSTS
-        "hsts_enabled": False,                # NEW: HSTS present
-        "hsts_max_age": 0,                    # NEW: max-age seconds
-        "hsts_includes_subdomains": False,    # NEW: includeSubDomains
-        "hsts_preload": False,                # NEW: preload directive
+        "hsts_enabled": False,
+        "hsts_max_age": 0,
+        "hsts_includes_subdomains": False,
+        "hsts_preload": False,
 
         # Certificate Transparency
-        "ct_log_count": 0,                    # NEW: entries in crt.sh
-        "ct_earliest_seen": None,             # NEW: first CT log date
-        "ct_check_failed": False,             # NEW: if crt.sh was unreachable
+        "ct_log_count": 0,
+        "ct_earliest_seen": None,
+        "ct_check_failed": False,
 
         # Org info (OV/EV)
-        "org_name": None,                     # NEW: organizationName
-        "org_country": None,                  # NEW: countryName
-        "org_locality": None,                 # NEW: localityName
+        "org_name": None,
+        "org_country": None,
+        "org_locality": None,
 
         "warning_flags": []
     }
@@ -268,7 +273,7 @@ def inspect_ssl(hostname: str):
                 subject_info = {k: v for item in cert.get("subject", []) for k, v in item}
 
                 common_name = issuer_info.get("commonName", "Unknown")
-                subject_cn = subject_info.get("commonName", "Unknown")
+                subject_cn  = subject_info.get("commonName", "Unknown")
                 report["issuer"] = common_name
 
                 # OV/EV org fields
@@ -276,7 +281,7 @@ def inspect_ssl(hostname: str):
                 report["org_country"]  = subject_info.get("countryName")
                 report["org_locality"] = subject_info.get("localityName")
 
-                # Self-signed
+                # Self-signed check
                 if common_name == subject_cn and common_name != "Unknown":
                     report["is_self_signed"] = True
                     report["warning_flags"].append("Self-Signed Certificate (High Risk)")
@@ -287,9 +292,10 @@ def inspect_ssl(hostname: str):
                         f"Unknown/Untrusted CA: {common_name}"
                     )
 
-                # Free/automated DV
-                if is_free_dv_provider(common_name):
-                    report["warning_flags"].append("Automated/Free DV Certificate")
+                # Free DV — stored as metadata only, no warning flag
+                # The scoring engine combines this with other signals (domain age,
+                # CT log count, DV validation) to decide if it's suspicious
+                report["is_free_dv"] = is_free_dv_provider(common_name)
 
                 # ── 4. Wildcard Detection ─────────────────────────────────
                 if subject_cn.startswith("*."):
@@ -301,20 +307,33 @@ def inspect_ssl(hostname: str):
                 not_after_str  = cert.get("notAfter")
 
                 if not_before_str and not_after_str:
-                    not_before = datetime.strptime(not_before_str, "%b %d %H:%M:%S %Y %Z")
-                    not_after  = datetime.strptime(not_after_str,  "%b %d %H:%M:%S %Y %Z")
-                    now        = datetime.utcnow()
+                    not_before     = datetime.strptime(not_before_str, "%b %d %H:%M:%S %Y %Z")
+                    not_after      = datetime.strptime(not_after_str,  "%b %d %H:%M:%S %Y %Z")
+                    now            = datetime.utcnow()
 
-                    age              = (now - not_before).days
-                    days_to_expire   = (not_after - now).days
-                    total_lifespan   = (not_after - not_before).days
+                    age            = (now - not_before).days
+                    days_to_expire = (not_after - now).days
+                    total_lifespan = (not_after - not_before).days
 
-                    report["cert_age_days"]          = age
-                    report["days_to_expire"]          = days_to_expire
-                    report["cert_total_lifespan_days"] = total_lifespan
+                    report["cert_age_days"]            = age
+                    report["days_to_expire"]            = days_to_expire
+                    report["cert_total_lifespan_days"]  = total_lifespan
 
+                    # cert_is_new: metadata for scoring engine, not a standalone flag.
+                    # Let's Encrypt auto-renews every ~60-90 days so "new" is normal
+                    # for free DV certs — scorer decides if new + free DV = suspicious.
+                    report["cert_is_new"] = age < 30
+
+                    # Only flag if extremely fresh (< 48h) — genuinely unusual
                     if age < 2:
                         report["warning_flags"].append("Very New Certificate (< 48h)")
+
+                    # Combo signal: free DV + brand new + DV-only = suspicious
+                    if report["is_free_dv"] and age < 2 and not report["org_name"]:
+                        report["warning_flags"].append(
+                            "New Free DV Cert on Unverified Domain (Suspicious)"
+                        )
+
                     if days_to_expire < 0:
                         report["warning_flags"].append("Certificate Expired")
                         report["is_valid"] = False
@@ -353,8 +372,8 @@ def inspect_ssl(hostname: str):
                 try:
                     cert_obj = x509.load_der_x509_certificate(der_cert)
                     key_info = analyze_public_key(cert_obj)
-                    report["key_type"]  = key_info["key_type"]
-                    report["key_bits"]  = key_info["key_bits"]
+                    report["key_type"] = key_info["key_type"]
+                    report["key_bits"] = key_info["key_bits"]
                     if key_info["key_is_weak"]:
                         report["warning_flags"].append(
                             f"Weak Public Key: {key_info['key_type']} {key_info['key_bits']}-bit"
@@ -382,7 +401,7 @@ def inspect_ssl(hostname: str):
 
     # ── 10. Certificate Transparency Log Check (crt.sh) ──────────────────
     ct = check_ct_logs(hostname)
-    report["ct_log_count"]    = ct["ct_log_count"]
+    report["ct_log_count"]     = ct["ct_log_count"]
     report["ct_earliest_seen"] = ct["ct_earliest_seen"]
     report["ct_check_failed"]  = ct["ct_check_failed"]
 
@@ -390,7 +409,6 @@ def inspect_ssl(hostname: str):
         if ct["ct_log_count"] == 0:
             report["warning_flags"].append("No CT Log Entries Found (Suspicious)")
         elif ct["ct_earliest_seen"]:
-            # If first CT appearance is very recent, flag it
             try:
                 first_seen = datetime.strptime(ct["ct_earliest_seen"], "%Y-%m-%d")
                 if (datetime.utcnow() - first_seen).days < 3:

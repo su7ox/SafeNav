@@ -1,5 +1,6 @@
 import socket
 import ipaddress
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
@@ -23,6 +24,7 @@ from app.core.ssl_check import inspect_ssl
 from app.core.reputation import check_domain_reputation
 from app.core.lexical import check_lexical_risk
 from app.core.content_scan import inspect_content
+from app.core.ip_intel import check_ip_intel
 
 # --- NEW SCORING ENGINE IMPORT ---
 from app.utils.scoring import calculate_risk_score
@@ -124,13 +126,18 @@ async def analyze_url(
         normalized_url, hostname, norm_flags = normalize_url(request.url)
         validate_target_ip(hostname) # SSRF Check
 
-        # Parallel Execution (Data Gathering)
+        # Data Gathering (Synchronous)
         fingerprint = identify_link_type(normalized_url, hostname)
         trace = trace_redirects(normalized_url)
         ssl_data = inspect_ssl(hostname)
-        reputation = await check_domain_reputation(normalized_url) 
         lexical = check_lexical_risk(normalized_url, hostname)
         content_data = inspect_content(trace.get("html_content"), normalized_url)
+        
+        # Data Gathering (Asynchronous, Parallel)
+        reputation, ip_intel = await asyncio.gather(
+            check_domain_reputation(normalized_url),
+            check_ip_intel(normalized_url)
+        )
         
     except socket.gaierror:
         return {
@@ -193,8 +200,8 @@ async def analyze_url(
         "num_subdomains": len(hostname.split('.')) - 2 if len(hostname.split('.')) > 2 else 0,
         "tld": f".{hostname.split('.')[-1]}" if "." in hostname else "",
         
-        # Pass the ENTIRE ssl_data dictionary so scoring.py can read the new warning_flags
         "ssl": ssl_data,
+        "ip_intel": ip_intel,
         
         "is_blacklisted": reputation.get("is_blacklisted", False),
         "domain_age_days": reputation.get("domain_age_days", 999),
@@ -208,8 +215,17 @@ async def analyze_url(
     
     # --- CONSTRUCT DETAILS ---
     details = {
-        # Embed the full advanced SSL dictionary directly into the details
         "ssl_security": ssl_data, 
+
+        "ip_intelligence": {
+            "ip_address": ip_intel.get("ip_address", "Unknown"),
+            "hosting_country": f"{ip_intel.get('hosting_country', 'Unknown')} {ip_intel.get('hosting_flag', '') or ''}".strip(),
+            "isp": ip_intel.get("isp", "Unknown"),
+            "asn_org": ip_intel.get("asn_org", "Unknown"),
+            "is_vpn_or_proxy": "Yes" if ip_intel.get("is_vpn_or_proxy") else "No",
+            "registrant_country": f"{ip_intel.get('registrant_country', 'Unknown')} {ip_intel.get('registrant_flag', '') or ''}".strip(),
+            "country_mismatch": "Yes" if ip_intel.get("country_mismatch") else "No",
+        },
         
         "phishing_checks": {
             "typosquatting": "Yes" if is_typosquat else "No",
