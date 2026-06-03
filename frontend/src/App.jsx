@@ -6,10 +6,8 @@ import {
   Route,
   useNavigate,
   useLocation,
-  Link,
 } from "react-router-dom";
 import { Toaster, toast } from "react-hot-toast";
-import { scanUrl, fetchHistory } from "./services/api";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
 import HistoryPage from './pages/History';
@@ -17,14 +15,11 @@ import AboutUs from "./pages/AboutUs";
 import {
   ShieldCheck,
   AlertTriangle,
-  XCircle,
   Search,
   Lock,
   History,
   LogOut,
-  User,
   Loader2,
-  Menu,
   Globe,
   Sun,
   Moon,
@@ -37,81 +32,6 @@ import {
 import "./App.css";
 
 const API_URL = "http://localhost:8000/api/v1";
-
-// ─────────────────────────────────────────────
-// DETAIL CARD
-// ─────────────────────────────────────────────
-const DetailCard = ({ title, icon, data }) => (
-  <div className="detail-card">
-    <div className="detail-header">
-      <span className="detail-icon">{icon}</span>
-      <h3>{title}</h3>
-    </div>
-    <div className="detail-content">
-      {Object.entries(data ?? {}).map(([key, value]) => {
-        const isUrl = typeof value === "string" && value.startsWith("http");
-        const normalized = String(value ?? "").trim().toLowerCase();
-        const isDanger =
-          value === true ||
-          normalized === "yes" ||
-          normalized === "unsafe" ||
-          normalized === "expired" ||
-          normalized === "detected" ||
-          normalized === "high" ||
-          normalized === "malicious" ||
-          normalized === "phishing";
-        const isSafe =
-          value === false ||
-          normalized === "no" ||
-          normalized === "safe" ||
-          normalized === "valid" ||
-          normalized === "not detected" ||
-          normalized === "clean" ||
-          normalized === "low";
-
-        const valueTone = isDanger ? "danger" : isSafe ? "safe" : "";
-        return (
-          <div
-            key={key}
-            className="detail-row"
-            style={{ alignItems: isUrl ? "flex-start" : "center" }}
-          >
-            <span className="detail-label min-w-[130px] shrink-0">
-              {key.replace(/_/g, " ")}:
-            </span>
-
-            {isUrl ? (
-              <a
-                href={value}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 hover:underline"
-                style={{
-                  wordBreak: "break-all",
-                  textAlign: "right",
-                  flexGrow: 1,
-                }}
-              >
-                {value}
-              </a>
-            ) : (
-              <span
-                className={`detail-value ${valueTone}`}
-                style={
-                  typeof value === "string" && value.length > 25
-                    ? { wordBreak: "break-all", textAlign: "right" }
-                    : {}
-                }
-              >
-                {value}
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  </div>
-);
 
 // ─────────────────────────────────────────────
 // SCANNER VIEW  (maps to "/scan")

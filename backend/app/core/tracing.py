@@ -16,7 +16,7 @@ def trace_redirects(url: str, max_redirects: int = 10):
         "hit_captcha_or_waf": False, 
         "chain": [],
         "error": None,
-        "warning_flags": [] # <--- ADD THIS LINE HERE
+        "warning_flags": []
     }
 
     # 1. User-Agent Masquerading
@@ -34,7 +34,6 @@ def trace_redirects(url: str, max_redirects: int = 10):
 
     try:
         # 2. Request Execution with stream=True (Saves bandwidth & prevents Tarpits)
-        # Timeout is set strictly (connect timeout, read timeout)
         response = session.get(url, headers=headers, allow_redirects=True, stream=True, timeout=(3.0, 5.0))
         
         # 3. Chain Analysis
@@ -63,7 +62,6 @@ def trace_redirects(url: str, max_redirects: int = 10):
             results["hit_captcha_or_waf"] = True
 
         # 4. Mitigation: Detect JS & Meta-Refresh Redirects
-        # We only read the first 2048 bytes (2KB) to look for client-side redirect signatures
         content_chunk = next(response.iter_content(chunk_size=2048), b"").decode('utf-8', errors='ignore')
         
         if re.search(r'http-equiv=["\']?refresh["\']?', content_chunk, re.IGNORECASE) or \
@@ -78,5 +76,9 @@ def trace_redirects(url: str, max_redirects: int = 10):
         results["error"] = "Connection Timeout (Possible Tarpit)"
     except requests.exceptions.RequestException as e:
         results["error"] = type(e).__name__
+
+    # Explicit Safety Check: 0 Hops means no loop is logically possible
+    if results["hop_count"] == 0:
+        results["redirect_loop_detected"] = False
 
     return results

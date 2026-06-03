@@ -2,6 +2,7 @@ import ssl
 import socket
 import certifi
 import requests
+import tldextract  # Make sure this is in requirements.txt
 from datetime import datetime
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
@@ -17,8 +18,9 @@ TRUSTED_CERTIFICATE_AUTHORITIES = [
     # Hosting / CDN providers
     "cPanel", "Cloudflare", "Cloudflare Inc ECC CA", "Cloudflare Inc RSA CA",
 
-    # Big Tech
-    "Google Trust Services", "GTS", "GTS CA 1C3", "GTS CA 1D4",
+    # Big Tech (Google Intermediates Added)
+    "Google Trust Services", "GTS", "GTS CA 1C3", "GTS CA 1D4", 
+    "WR2", "WR3", "WE1", "Google Trust Services LLC",
     "Amazon", "Amazon Root CA 1", "Amazon Root CA 2", "Amazon Root CA 3", "Amazon Root CA 4",
     "Microsoft Azure TLS Issuing CA", "Microsoft RSA TLS CA",
 
@@ -57,18 +59,15 @@ def is_trusted_ca(issuer_cn: str) -> bool:
     issuer_lower = issuer_cn.lower()
     return any(ca.lower() in issuer_lower for ca in TRUSTED_CERTIFICATE_AUTHORITIES)
 
-
 def is_free_dv_provider(issuer_cn: str) -> bool:
     """Check if the issuer is a free/automated DV certificate provider."""
     issuer_lower = issuer_cn.lower()
     return any(provider.lower() in issuer_lower for provider in FREE_DV_PROVIDERS)
 
-
 def check_hsts(hostname: str) -> dict:
     """
     Check HSTS header from the live HTTPS response.
     Returns hsts_enabled, max_age, includes_subdomains, preload.
-    Does NOT raise — returns safe defaults on failure.
     """
     result = {
         "hsts_enabled": False,
@@ -77,11 +76,16 @@ def check_hsts(hostname: str) -> dict:
         "hsts_preload": False,
     }
     try:
+        # Added User-Agent so we don't get blocked before getting the headers
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
         resp = requests.get(
             f"https://{hostname}",
             timeout=5,
-            allow_redirects=True,
-            verify=certifi.where()
+            allow_redirects=True, # Ensure redirects are followed
+            verify=certifi.where(),
+            headers=headers
         )
         hsts_header = resp.headers.get("Strict-Transport-Security", "")
         if hsts_header:
@@ -98,14 +102,13 @@ def check_hsts(hostname: str) -> dict:
                 elif directive == "preload":
                     result["hsts_preload"] = True
     except Exception:
-        pass  # Non-fatal: HSTS check failure doesn't invalidate the cert
+        pass  
     return result
-
 
 def check_ct_logs(hostname: str) -> dict:
     """
-    Query crt.sh to check Certificate Transparency log presence.
-    Returns ct_log_count and earliest seen date.
+    Query crt.sh using a wildcard on the base domain to ensure 
+    we capture certs covering the target domain.
     """
     result = {
         "ct_log_count": 0,
@@ -113,8 +116,11 @@ def check_ct_logs(hostname: str) -> dict:
         "ct_check_failed": False,
     }
     try:
+        extracted = tldextract.extract(hostname)
+        base_domain = f"{extracted.domain}.{extracted.suffix}"
+        
         resp = requests.get(
-            f"https://crt.sh/?q={hostname}&output=json",
+            f"https://crt.sh/?q=%.{base_domain}&output=json",
             timeout=6
         )
         if resp.status_code == 200:
@@ -134,7 +140,6 @@ def check_ct_logs(hostname: str) -> dict:
     except Exception:
         result["ct_check_failed"] = True
     return result
-
 
 def analyze_public_key(cert_obj) -> dict:
     """

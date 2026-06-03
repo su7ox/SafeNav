@@ -8,12 +8,18 @@ def calculate_risk_score(scan_results: dict) -> dict:
         "reputation": 0,
         "content": 0
     }
+    
     def add_risk(points: int, message: str, category: str):
         """Helper function to apply penalties and log the reason."""
         nonlocal total_score
         total_score += points
         category_scores[category] += points
         risk_factors.append(f"{message} (+{points})")
+        
+    # --- GLOBAL CONTEXT FOR GUARDS ---
+    ip_data = scan_results.get("ip_intel", {})
+    is_major = ip_data.get("is_major_host", False)
+
     # --- 1. Lexical / URL Checks ---
     url = scan_results.get('url', '').lower()
     
@@ -34,10 +40,12 @@ def calculate_risk_score(scan_results: dict) -> dict:
     found_keywords = [kw for kw in suspicious_keywords if kw in url]
     if found_keywords:
         add_risk(10 * len(found_keywords), f"Suspicious keywords in URL ({', '.join(found_keywords)})", "lexical")
+        
     # Abuse-heavy TLDs
     suspicious_tlds = ['.xyz', '.top', '.pw', '.cc', '.info', '.club', '.online', '.tk', '.ml', '.ga', '.cf', '.gq']
     if scan_results.get('tld') in suspicious_tlds:
         add_risk(25, f"Highly abused Top-Level Domain ({scan_results.get('tld')})", "lexical")
+
     # --- 2. ADVANCED SSL/TLS Checks ---
     ssl_data = scan_results.get('ssl', scan_results)
     ssl_warnings = ssl_data.get('warning_flags', [])
@@ -47,13 +55,14 @@ def calculate_risk_score(scan_results: dict) -> dict:
         add_risk(65, "Invalid, expired, or missing SSL certificate", "ssl")    
     if ssl_data.get('is_self_signed', False):
         add_risk(65, "Self-signed certificate detected (Highly suspicious for public sites)", "ssl")
+        
     ssl_age = ssl_data.get('cert_age_days', 999)
     if ssl_age < 2:
         add_risk(40, "SSL certificate is incredibly new (< 48 hours old)", "ssl")
     elif ssl_age < 14:
         add_risk(25, "SSL certificate is very new (< 14 days old)", "ssl")
-    elif ssl_age < 60:
-        add_risk(10, "SSL certificate is relatively new (< 60 days old)", "ssl")
+    # REMOVED: < 60 days check (Too noisy for modern auto-renewing certs)
+
     # Deep Inspection 
     if any("Automated/Free DV" in flag for flag in ssl_warnings):
         add_risk(10, "Domain uses a free/automated SSL issuer (common in phishing)", "ssl")    
@@ -61,25 +70,29 @@ def calculate_risk_score(scan_results: dict) -> dict:
         add_risk(25, "Server uses deprecated or weak TLS protocol", "ssl")    
     if any("Weak Cipher" in flag for flag in ssl_warnings):
         add_risk(15, "Server negotiated a weak cipher suite", "ssl")
-    if any("phishing kit signal" in flag for flag in ssl_warnings):
+        
+    # SAN Pattern Guards
+    san_flag = any("phishing kit signal" in flag for flag in ssl_warnings)
+    if san_flag and not is_major:
         add_risk(35, "Suspicious Subject Alternative Name (SAN) pattern (Phishing kit signal)", "ssl")
     
-    if any("High number of SANs" in flag for flag in ssl_warnings) and not any("phishing kit signal" in flag for flag in ssl_warnings):
+    if any("High number of SANs" in flag for flag in ssl_warnings) and not san_flag and not is_major:
          add_risk(10, "High number of domains packed onto a single certificate", "ssl")
+         
     if any("No CT Log Entries" in flag for flag in ssl_warnings):
         add_risk(25, "Certificate Transparency logs missing (Hidden/Suspicious certificate)", "ssl")    
     if any("Abnormally Short" in flag for flag in ssl_warnings):
         add_risk(15, "Certificate lifespan is abnormally short", "ssl")
-    if scan_results.get('is_blacklisted', False):
         
+    # --- 3. IP Intelligence & Reputation ---
+    if scan_results.get('is_blacklisted', False):
         add_risk(100, "Domain is explicitly flagged on a threat blacklist", "reputation")
     
- # --- 3. IP Intelligence ---
-    ip_data = scan_results.get("ip_intel", {})
     ip_warnings = ip_data.get("warning_flags", [])
  
     if any("VPN / Proxy" in f for f in ip_warnings):
-        add_risk(30, "IP flagged as VPN / Proxy / Tor Exit Node", "reputation")
+        if not is_major: # Guard: Don't penalize Anycast/CDN IPs
+            add_risk(30, "IP flagged as VPN / Proxy / Tor Exit Node", "reputation")
  
     if any("High-Risk Country" in f for f in ip_warnings):
         add_risk(20, "Site hosted in a country with high phishing infrastructure abuse", "reputation")
@@ -118,6 +131,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
 
     # --- Final Score Normalization ---
     final_score = min(total_score, 100)
+    
     # Determine Granular Risk Tier
     if final_score >= 75:
         risk_level = "CRITICAL"
@@ -127,6 +141,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
         risk_level = "WARNING"
     else:
         risk_level = "SAFE"
+        
     return {
         "final_score": final_score,
         "risk_level": risk_level,
