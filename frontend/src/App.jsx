@@ -214,12 +214,33 @@ const ScannerView = ({ token, onRequestLogin }) => {
               </div>
             </div>
 
-            {/* AI INSIGHT */}
+            {/* INSIGHT */}
             <div className="ai-insight">
-              <div className="ai-insight-header">
-                <Activity size={15} />
-                <h3> Security Insight</h3>
+              <div className="ai-insight-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Activity size={15} />
+                  <h3 style={{ margin: 0 }}> Security Insight</h3>
+                </div>
+                
+                {result.classification?.category_label && 
+                 result.classification.category_label !== " Unknown" && (
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    padding: '4px 10px',
+                    borderRadius: '99px',
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    {result.classification.category_label}
+                  </span>
+                )}
               </div>
+              
               <div className="ai-insight-content">
                 {(result.risk_factors || result.reasoning || []).map((r, i) => (
                   <p key={i}>• {r}</p>

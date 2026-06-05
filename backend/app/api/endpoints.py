@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
+from app.core.content_classify import classify_content
 
 # --- SQLALCHEMY IMPORTS ---
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,9 +135,10 @@ async def analyze_url(
         content_data = inspect_content(trace.get("html_content"), normalized_url)
         
         # Data Gathering (Asynchronous, Parallel)
-        reputation, ip_intel = await asyncio.gather(
+        reputation, ip_intel, classification_data = await asyncio.gather(
             check_domain_reputation(normalized_url),
-            check_ip_intel(normalized_url)
+            check_ip_intel(normalized_url),
+            classify_content(normalized_url)
         )
         
     except socket.gaierror:
@@ -285,11 +287,12 @@ async def analyze_url(
         "id": str(new_scan.id),
         "url": normalized_url,
         "risk_score": risk_assessment["final_score"],
-        "risk_level": risk_assessment["risk_level"], # Updated from 'verdict'
+        "risk_level": risk_assessment["risk_level"], 
         "details": details,
-        "category_breakdown": risk_assessment["category_breakdown"], # Unpacked for React charts
+        "category_breakdown": risk_assessment["category_breakdown"],
         "risk_factors": risk_assessment["risk_factors"],
-        "ssl_details": ssl_data, # Top-level exposure for the React Frontend
+        "ssl_details": ssl_data, 
+        "classification": classification_data,
         "scan_time": scan_time.isoformat(),
         "user_email": user.email,
         "is_guest": False
