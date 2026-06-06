@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
 # ─────────────────────────────────────────────
 TRUSTED_CERTIFICATE_AUTHORITIES = [
     # Free / ACME-based
-    "R3", "Let's Encrypt", "ZeroSSL", "Buypass",
+    "R3", "Let's Encrypt", "ZeroSSL", "Buypass","E7","E6","E5",
     "ISRG Root X1", "ISRG Root X2", "DST Root CA X3",
 
     # Hosting / CDN providers

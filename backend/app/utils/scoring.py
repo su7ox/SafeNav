@@ -1,5 +1,6 @@
 import ipaddress
 import urllib.parse
+from app.core.trust_manager import trust_manager
 
 # Comprehensive list of well-known, safe public IPs 
 # (Major DNS resolvers, security filters, and Anycast services)
@@ -56,10 +57,11 @@ def calculate_risk_score(scan_results: dict) -> dict:
         
     # --- GLOBAL CONTEXT FOR GUARDS ---
     ip_data = scan_results.get("ip_intel", {})
-    is_major = ip_data.get("is_major_host", False)
-
     # --- 1. Lexical / URL Checks ---
     url = scan_results.get('url', '').lower()
+    
+    # 🚀 ENTERPRISE UPGRADE: Dynamically check the Top 100k memory cache
+    is_major = trust_manager.is_major_domain(url)
     
     # Contextual IP Evaluation
     hostname = urllib.parse.urlparse(url).hostname or ""
