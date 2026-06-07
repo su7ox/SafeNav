@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
 from app.core.content_classify import classify_content
+from app.core.pre_flight import safe_classify_url
 
 # --- SQLALCHEMY IMPORTS ---
 from sqlalchemy.ext.asyncio import AsyncSession
