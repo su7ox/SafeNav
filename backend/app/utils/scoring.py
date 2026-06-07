@@ -62,7 +62,21 @@ def calculate_risk_score(scan_results: dict) -> dict:
     
     # 🚀 ENTERPRISE UPGRADE: Dynamically check the Top 100k memory cache
     is_major = trust_manager.is_major_domain(url)
+
+    # 2. 🚀 NEW: Academic Trust Bypass
+    # Hackers cannot easily register .edu or .ac.* domains.
+    hostname = urllib.parse.urlparse(url).hostname or ""
+    is_academic = hostname.endswith('.edu') or '.edu.' in hostname or '.ac.' in hostname
     
+    # 3. Create a combined Master Trust variable
+    is_highly_trusted = is_major or is_academic
+
+    if is_highly_trusted and "ssl" in scan_results:
+        warnings = scan_results["ssl"].get("warning_flags", [])
+        scan_results["ssl"]["warning_flags"] = [
+            w for w in warnings 
+            if "SANs" not in w and "phishing kit signal" not in w and "CT Log" not in w
+        ]
     # Contextual IP Evaluation
     hostname = urllib.parse.urlparse(url).hostname or ""
     ip_eval = evaluate_ip_risk(hostname)
@@ -81,7 +95,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
     # Check for social engineering keywords in the URL
     suspicious_keywords = ['login', 'secure', 'account', 'update', 'verify', 'bank', 'paypal', 'signin', 'support']
     found_keywords = [kw for kw in suspicious_keywords if kw in url]
-    if found_keywords:
+    if found_keywords and not is_highly_trusted:
         add_risk(10 * len(found_keywords), f"Suspicious keywords in URL ({', '.join(found_keywords)})", "lexical")
         
     # Abuse-heavy TLDs
@@ -113,15 +127,15 @@ def calculate_risk_score(scan_results: dict) -> dict:
         
     # SAN Pattern Guards
     san_flag = any("phishing kit signal" in flag for flag in ssl_warnings)
-    if san_flag and not is_major:
+    if san_flag and not is_highly_trusted:
         add_risk(35, "Suspicious Subject Alternative Name (SAN) pattern (Phishing kit signal)", "ssl")
     
-    if any("High number of SANs" in flag for flag in ssl_warnings) and not san_flag and not is_major:
+    if any("High number of SANs" in flag for flag in ssl_warnings) and not san_flag and not is_highly_trusted:
          add_risk(10, "High number of domains packed onto a single certificate", "ssl")
          
     if any("No CT Log Entries" in flag for flag in ssl_warnings):
         # Guard: crt.sh database lag
-        if not is_major and ssl_age >= 2:
+        if not is_highly_trusted and ssl_age >= 2:
             add_risk(15, "CT logs missing (Hidden cert or crt.sh API lag)", "ssl")    
             
     if any("Abnormally Short" in flag for flag in ssl_warnings):
@@ -134,7 +148,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
     ip_warnings = ip_data.get("warning_flags", [])
  
     if any("VPN / Proxy" in f for f in ip_warnings):
-        if not is_major: 
+        if not is_highly_trusted: 
             add_risk(30, "IP flagged as VPN / Proxy / Tor Exit Node", "reputation")
  
     if any("High-Risk Country" in f for f in ip_warnings):
