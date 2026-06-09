@@ -126,20 +126,39 @@ async def analyze_url(
 
     try:
         normalized_url, hostname, norm_flags = normalize_url(request.url)
-        validate_target_ip(hostname) # SSRF Check
+        validate_target_ip(hostname) # SSRF Check on the initial URL
 
-        # Data Gathering (Synchronous)
-        fingerprint = identify_link_type(normalized_url, hostname)
+        # 1. Trace redirects FIRST to get the final destination
         trace = trace_redirects(normalized_url)
-        ssl_data = inspect_ssl(hostname)
-        lexical = check_lexical_risk(normalized_url, hostname)
-        content_data = inspect_content(trace.get("html_content"), normalized_url)
+        final_url = trace.get("final_url", normalized_url)
         
-        # Data Gathering (Asynchronous, Parallel)
+        # 2. Normalize the final destination
+        target_url, target_hostname, _ = normalize_url(final_url)
+        
+        # 3. Security: Prevent SSRF via malicious redirects
+        if target_hostname != hostname:
+            validate_target_ip(target_hostname)
+
+        # 4. Check if the original link was a shortener
+        original_fingerprint = identify_link_type(normalized_url, hostname)
+
+        # 5. Run all core checks against the TARGET (Final) URL and Hostname
+        fingerprint = identify_link_type(target_url, target_hostname)
+        
+        # Carry over the shortened flag so the UI still knows a shortener was used
+        if original_fingerprint.get("is_shortened"):
+            fingerprint["is_shortened"] = True
+            fingerprint["provider"] = original_fingerprint.get("provider")
+
+        ssl_data = inspect_ssl(target_hostname)
+        lexical = check_lexical_risk(target_url, target_hostname)
+        content_data = inspect_content(trace.get("html_content"), target_url)
+        
+        # Data Gathering (Asynchronous, Parallel) - Use target_url
         reputation, ip_intel, classification_data = await asyncio.gather(
-            check_domain_reputation(normalized_url),
-            check_ip_intel(normalized_url),
-            classify_content(normalized_url)
+            check_domain_reputation(target_url),
+            check_ip_intel(target_url),
+            classify_content(target_url)
         )
         
     except socket.gaierror:
@@ -156,11 +175,11 @@ async def analyze_url(
 
     # --- CALCULATE FLAGS FOR DETAILS ---
     
-    # 1. Phishing
+    # 1. Phishing (Update to use target_hostname)
     is_typosquat = lexical.get("is_typosquat", False)
     brand_detected = lexical.get("target", "None") if is_typosquat else "None"
-    suspicious_kw = any(x in normalized_url for x in ["login", "verify", "update", "secure", "bank"])
-    is_homograph = "xn--" in hostname 
+    suspicious_kw = any(x in target_url for x in ["login", "verify", "update", "secure", "bank"])
+    is_homograph = "xn--" in target_hostname 
 
     # 2. Reputation
     dom_age = reputation.get("domain_age_days")
@@ -186,10 +205,10 @@ async def analyze_url(
     short_provider = short_provider.title() if short_provider else "None"
     is_obfuscated = "%" in request.url or "0x" in request.url
 
-    # 4. Redirects
+    # 4. Redirects (Update end_domain to parse target_url)
     hops = trace.get("hop_count", 0)
     parsed_start = urlparse(normalized_url)
-    parsed_end = urlparse(trace.get("final_url", ""))
+    parsed_end = urlparse(target_url)
     start_domain = parsed_start.netloc
     end_domain = parsed_end.netloc
     cross_domain = start_domain != end_domain
@@ -197,11 +216,11 @@ async def analyze_url(
     # --- NEW SCORING ENGINE INTEGRATION ---
     
     combined_scan_data = {
-        "url": normalized_url,
+        "url": target_url, # Score the final destination URL
         "has_ip_in_domain": fingerprint.get("is_ip_based", False),
-        "url_length": len(normalized_url),
-        "num_subdomains": len(hostname.split('.')) - 2 if len(hostname.split('.')) > 2 else 0,
-        "tld": f".{hostname.split('.')[-1]}" if "." in hostname else "",
+        "url_length": len(target_url),
+        "num_subdomains": len(target_hostname.split('.')) - 2 if len(target_hostname.split('.')) > 2 else 0,
+        "tld": f".{target_hostname.split('.')[-1]}" if "." in target_hostname else "",
         
         "ssl": ssl_data,
         "ip_intel": ip_intel,

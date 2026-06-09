@@ -241,6 +241,41 @@ const ScannerView = ({ token, onRequestLogin }) => {
                 )}
               </div>
               
+              {/* --- NEW: LINK SHORTENER WARNING --- */}
+              {result.details?.link_structure?.link_category === "Shortened" && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '12px 14px',
+                  backgroundColor: 'rgba(255, 183, 3, 0.1)',
+                  border: '1px solid rgba(255, 183, 3, 0.25)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px'
+                }}>
+                  <span style={{ fontSize: '18px', marginTop: '2px' }}>🔗</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span>
+                      <strong>Shortener Detected:</strong> This link originally started at <strong style={{ color: 'var(--cyan)' }}>{result.details.link_structure.original_domain}</strong>
+                    </span>
+                    <span>
+                      <strong>Destination:</strong>{' '}
+                      <a 
+                        href={result.details.redirect_analysis?.final_destination || result.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ color: '#00e5ff', fontWeight: 'bold', textDecoration: 'underline', wordBreak: 'break-all' }}
+                      >
+                        {result.details.redirect_analysis?.final_destination || result.url}
+                      </a>
+                    </span>
+                  </div>
+                </div>
+              )}
+              {/* ----------------------------------- */}
+
               <div className="ai-insight-content">
                 {(result.risk_factors || result.reasoning || []).map((r, i) => (
                   <p key={i}>• {r}</p>

@@ -5,21 +5,6 @@ from app.api.endpoints import router as api_router
 from app.core.database import engine, Base
 from app.core.models import User, ScanHistory 
 from app.core.trust_manager import trust_manager
-from app.utils.feed_syncer import sync_top_domains_feed
-import threading
-import time
-
-# --- BACKGROUND CRON TASK ---
-def weekly_cron_job():
-    """Background thread running infinitely to refresh data every 7 days."""
-    while True:
-        time.sleep(7 * 24 * 60 * 60)  # Wait 7 days
-        try:
-            print("[Cron] Starting weekly sync of enterprise top domains list...")
-            sync_top_domains_feed()
-            trust_manager.load_cache()
-        except Exception as e:
-            print(f"❌ [Cron] Sync error: {e}")
 
 # --- LIFECYCLE MANAGEMENT ---
 @asynccontextmanager
@@ -37,13 +22,9 @@ async def lifespan(app: FastAPI):
     # 2. Load top domains list into memory cache
     try:
         trust_manager.load_cache()
+        print("✅ Trust manager data loaded successfully!")
     except Exception as e:
         print(f"❌ Failed to load trust manager data: {e}")
-
-    # 3. Fire up background feed update daemon thread
-    cron = threading.Thread(target=weekly_cron_job, daemon=True)
-    cron.start()
-    print("🚀 Background feed syncer worker started successfully!")
 
     yield  # FastAPI running state occurs here
 
@@ -52,7 +33,7 @@ async def lifespan(app: FastAPI):
     print("🛑 Disconnected from PostgreSQL safely.")
 
 
-# --- FASTAPI APP DEFNITION ---
+# --- FASTAPI APP DEFINITION ---
 app = FastAPI(title="SafeNav API", version="1.0", lifespan=lifespan)
 
 # --- CORS SETTINGS ---
