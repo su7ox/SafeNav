@@ -14,4 +14,5 @@ python-jose[cryptography]
 passlib[argon2]
 certifi
 requests
-cryptography 
+cryptography
+jellyfish 
