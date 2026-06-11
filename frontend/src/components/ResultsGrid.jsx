@@ -6,27 +6,24 @@ export const ResultsGrid = ({ results }) => {
   if (!results || !results.details) return null;
   const d = results.details;
 
-  // Helpers
   const truncate = (str, len) => str?.length > len ? str.substring(0, len) + '…' : str;
 
-  // We need the link structure data to extract the two moved fields
+
   const link = d.link_structure || {};
 
-// --- 1. SSL & Security (Concept 3: Identity vs. Encryption Split) ---
+// --- 1. SSL & Security  ---
   const ssl = d.ssl_security || {};
   let sslPills = [...(ssl.warning_flags || [])];
   if (ssl.is_self_signed) sslPills.push("Self-Signed Certificate");
 
-  // simplified consumer-friendly badge
+
   const sslBadge = ssl.is_valid 
     ? { text: "Connection Secured", color: 'badge-green' }
-    : { text: "⚠ Unsecured", color: 'badge-red' };
+    : { text: "Unsecured", color: 'badge-red' };
 
-  // Calculate the Identity status based on the Validation Type
-  // OV/EV means a legal business was verified. Everything else (DV) means the identity is hidden.
   const isIdentityVerified = ssl.validation_type && ssl.validation_type.includes("OV/EV");
   const identityValue = isIdentityVerified 
-    ? "Verified Business ✅" 
+    ? "Verified Business" 
     : "Hidden (Standard) ";
 
   // The new Plain-English Fields
@@ -49,7 +46,7 @@ export const ResultsGrid = ({ results }) => {
     }
   ];
 
-  // --- 2. Phishing Checks (UPGRADED) ---
+  // --- 2. Phishing Checks ---
   const phish = d.phishing_checks || {};
   const phishRisks = [phish.typosquatting, phish.brand_similarity, phish.suspicious_keywords, phish.homograph_attack]
     .some(v => v && v !== 'No' && v !== 'None' && v !== false);
@@ -61,7 +58,6 @@ export const ResultsGrid = ({ results }) => {
     { label: "Brand Similarity", value: phish.brand_similarity || 'None', type: "phishing" },
     { label: "Suspicious Keywords", value: phish.suspicious_keywords || 'No', type: "phishing" },
     { label: "Homograph Attack", value: phish.homograph_attack || 'No', type: "phishing" },
-    // 🚀 Migrated from Link Structure
     { label: "Obfuscation", value: link.is_obfuscated ? 'Yes' : 'No', type: "phishing" } 
   ];
 

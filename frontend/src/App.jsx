@@ -1,16 +1,11 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { ResultsGrid } from "./components/ResultsGrid";
-import {
-  Routes,
-  Route,
-  useNavigate,
-  useLocation,
-} from "react-router-dom";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Toaster, toast } from "react-hot-toast";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
-import HistoryPage from './pages/History';
+import HistoryPage from "./pages/History";
 import AboutUs from "./pages/AboutUs";
 import {
   ShieldCheck,
@@ -194,7 +189,25 @@ const ScannerView = ({ token, onRequestLogin }) => {
                     >
                       {result.risk_level || result.verdict}
                     </h2>
-                    <p className="target-url">Target: {result.url}</p>
+                    <p className="target-url">
+                      Destination:{" "}
+                      <a
+                        href={
+                          result.details?.redirect_analysis
+                            ?.final_destination || result.url
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "inherit",
+                          textDecoration: "underline",
+                        }}
+                        title="Click to visit the final destination safely"
+                      >
+                        {result.details?.redirect_analysis?.final_destination ||
+                          result.url}
+                      </a>
+                    </p>
                   </div>
                 </div>
                 <div className="risk-score-display">
@@ -216,31 +229,42 @@ const ScannerView = ({ token, onRequestLogin }) => {
 
             {/* INSIGHT */}
             <div className="ai-insight">
-              <div className="ai-insight-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                className="ai-insight-header"
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                >
                   <Activity size={15} />
                   <h3 style={{ margin: 0 }}> Security Insight</h3>
                 </div>
-                
-                {result.classification?.category_label && 
-                 result.classification.category_label !== " Unknown" && (
-                  <span style={{
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    padding: '4px 10px',
-                    borderRadius: '99px',
-                    border: '1px solid var(--border-color)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    {result.classification.category_label}
-                  </span>
-                )}
+
+                {result.classification?.category_label &&
+                  result.classification.category_label !== " Unknown" && (
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        background: "var(--bg-secondary)",
+                        color: "var(--text-primary)",
+                        padding: "4px 10px",
+                        borderRadius: "99px",
+                        border: "1px solid var(--border-color)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      {result.classification.category_label}
+                    </span>
+                  )}
               </div>
-              
+
               {/* --- NEW: LINK SHORTENER WARNING --- */}
               {result.details?.link_structure?.link_category === "Shortened" && (
                 <div style={{
@@ -255,21 +279,10 @@ const ScannerView = ({ token, onRequestLogin }) => {
                   alignItems: 'flex-start',
                   gap: '10px'
                 }}>
-                  <span style={{ fontSize: '18px', marginTop: '2px' }}>🔗</span>
+                  {/* <span style={{ fontSize: '18px', marginTop: '2px' }}>🔗</span> */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <span>
                       <strong>Shortener Detected:</strong> This link originally started at <strong style={{ color: 'var(--cyan)' }}>{result.details.link_structure.original_domain}</strong>
-                    </span>
-                    <span>
-                      <strong>Destination:</strong>{' '}
-                      <a 
-                        href={result.details.redirect_analysis?.final_destination || result.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={{ color: '#00e5ff', fontWeight: 'bold', textDecoration: 'underline', wordBreak: 'break-all' }}
-                      >
-                        {result.details.redirect_analysis?.final_destination || result.url}
-                      </a>
                     </span>
                   </div>
                 </div>
