@@ -1,3 +1,6 @@
+# analyzers/lexical.py (The Threat Analyzer): 
+# This file handle analyzing the URL string for explicitly malicious payloads (Embedded credentials, dangerous javascript: schemes, and .exe/.apk malware downloads).
+
 from __future__ import annotations
 
 import math
@@ -12,7 +15,9 @@ from jellyfish import jaro_winkler_similarity
 
 from app.data.brands import BRAND_TARGETS
 from app.data.keywords import SUSPICIOUS_KEYWORDS, TRUSTED_CDN_DOMAINS
+from urllib.parse import urlparse, parse_qs
 
+DANGEROUS_EXTENSIONS = {".exe", ".apk", ".dmg", ".zip", ".rar", ".scr", ".bat", ".ps1"}
 
 _HOMOGRAPH_MAP: dict[str, str] = {
     "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "r",
@@ -51,6 +56,9 @@ class LexicalReport:
     url_length: int = 0
     digit_ratio: float = 0.0
     special_char_count: int = 0
+    has_dangerous_scheme: bool = False
+    has_embedded_credentials: bool = False
+    is_suspicious_download: bool = False
     risk_score_contribution: int = 0
     warning_flags: list[str] = field(default_factory=list)
 
@@ -142,6 +150,12 @@ def _compute_structural_signals(url: str, parsed) -> dict:
 
 def _score_contribution(report: LexicalReport) -> int:
     score = 0
+    if report.has_dangerous_scheme:
+        score += 80  
+    if report.has_embedded_credentials:
+        score += 50 
+    if report.is_suspicious_download:
+        score += 50  
     if report.is_dga_candidate:
         score += 25
     if report.typosquat_target:
@@ -168,6 +182,33 @@ def _score_contribution(report: LexicalReport) -> int:
 def check_lexical_risk(url: str, hostname: str) -> LexicalReport:
     report = LexicalReport()
     parsed = urlparse(url)
+
+    scheme = parsed.scheme.lower()
+
+    # 1. Dangerous Schemes (Code Execution Risk)
+    if scheme in ["data", "javascript", "vbscript"]:
+        report.warning_flags.append(f"Dangerous Scheme ({scheme}) — executes code directly in browser")
+        report.has_dangerous_scheme = True  
+
+    # 2. Embedded Credentials (Spoofing Risk)
+    if parsed.username or parsed.password:
+        report.warning_flags.append("Embedded Credentials Detected — high risk of domain spoofing")
+        report.has_embedded_credentials = True
+
+    # 3. Malicious File Downloads (Payload Delivery)
+    path_lower = parsed.path.lower()
+    query_params = parse_qs(parsed.query.lower())
+    has_dangerous_ext = any(path_lower.endswith(e) for e in DANGEROUS_EXTENSIONS)
+    
+    if not has_dangerous_ext:
+        for param_values in query_params.values():
+            if any(any(val.endswith(e) for e in DANGEROUS_EXTENSIONS) for val in param_values):
+                has_dangerous_ext = True
+                break
+
+    if has_dangerous_ext:
+        report.warning_flags.append("Direct File Download Detected (.exe, .apk, etc.)")
+        report.is_suspicious_download = True
 
     host_parts = hostname.split(".")
     domain_part = host_parts[0] if host_parts else hostname
