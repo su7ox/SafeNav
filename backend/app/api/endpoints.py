@@ -6,27 +6,31 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
-from app.core.pre_flight import safe_classify_url
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
-from app.core.database import get_db
-from app.core.models import User, ScanHistory, ScanResponseSchema # (Make sure you imported your schemas)
 
+# --- App Core Imports (Infrastructure) ---
+from app.core.database import get_db
+from app.core.models import User, ScanHistory, ScanResponseSchema
 from app.core.security import verify_password, get_password_hash, create_access_token
 
-from app.core.normalization import normalize_url
-from app.core.fingerprinting import identify_link_type
-from app.core.tracing import trace_redirects
-from app.core.ssl_check import inspect_ssl
-from app.core.reputation import check_domain_reputation
-from app.core.lexical import check_lexical_risk
-from app.core.content_scan import inspect_content
-from app.core.ip_intel import check_ip_intel
+# --- Phase 1: Pre-Checks ---
+from app.pre_checks.pre_flight import safe_classify_url
+from app.pre_checks.normalization import normalize_url
+from app.pre_checks.fingerprinting import identify_link_type
+from app.pre_checks.tracing import trace_redirects
 
+# --- Phase 2: Security Analyzers ---
+from app.analyzers.ssl_check import inspect_ssl
+from app.analyzers.reputation import check_domain_reputation
+from app.analyzers.lexical import check_lexical_risk
+from app.analyzers.content_scan import inspect_content
+from app.analyzers.ip_intel import check_ip_intel
+
+# --- Utilities ---
 from app.utils.scoring import calculate_risk_score
-
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login", auto_error=False)
@@ -125,12 +129,14 @@ async def analyze_url(
             fingerprint["provider"] = original_fingerprint.get("provider")
 
         ssl_data = inspect_ssl(target_hostname)
-        lexical = check_lexical_risk(normalized_url, hostname)
+        # FIX: Run lexical analysis on the final destination, not the shortener
+        lexical = check_lexical_risk(target_url, target_hostname)
         content_data = inspect_content(trace.get("html_content"), target_url, target_hostname)
 
+        # FIX: Check reputation and IP intel on the final destination
         reputation, ip_intel = await asyncio.gather(
-            check_domain_reputation(normalized_url),
-            check_ip_intel(normalized_url)
+            check_domain_reputation(target_url),
+            check_ip_intel(target_url)
         )
 
     except socket.gaierror:
