@@ -43,7 +43,11 @@ def is_link_shortener(url: str, domain_only: str) -> bool:
     if len(ext.domain) <= 6 and 0 < len(path) <= 10:
         if re.match(r"^[a-zA-Z0-9_-]+$", path):
             try:
-                response = requests.head(url, allow_redirects=False, timeout=3)
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+                response = requests.head(url, headers=headers, allow_redirects=False, timeout=3)
+                
                 if response.status_code in [301, 302, 303, 307, 308]:
                     return True
             except requests.RequestException:
@@ -51,7 +55,6 @@ def is_link_shortener(url: str, domain_only: str) -> bool:
     return False
 
 def identify_link_type(url: str, hostname: str):
-    # Notice how clean this dictionary is now! Just infrastructure types.
     results = {
         "is_ip_based": False,
         "is_shortened": False,

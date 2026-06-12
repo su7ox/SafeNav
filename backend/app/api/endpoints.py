@@ -3,6 +3,7 @@ import ipaddress
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from langsmith import trace
 from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
@@ -110,17 +111,22 @@ async def analyze_url(
 ):
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
+        
     try:
+        # Phase 1: Pre-flight Normalization on original input
         normalized_url, hostname, norm_flags = normalize_url(request.url)
         validate_target_ip(hostname)
-        trace = trace_redirects(normalized_url)
-        final_url = trace.get("final_url", normalized_url)
+        
+        # Phase 2: Trace redirects to track the final landing target
+        trace = await trace_redirects(normalized_url)
+        target_url = trace.get("final_destination", normalized_url)
+        target_hostname = urlparse(target_url).hostname or hostname
 
-        target_url, target_hostname, _ = normalize_url(final_url)
-
+        # Safety Guard: Ensure resolved destination IP isn't reaching a local/private network
         if target_hostname != hostname:
             validate_target_ip(target_hostname)
 
+        # Phase 3: Infrastructure Identification (Fingerprinting)
         original_fingerprint = identify_link_type(normalized_url, hostname)
         fingerprint = identify_link_type(target_url, target_hostname)
 
@@ -128,17 +134,16 @@ async def analyze_url(
             fingerprint["is_shortened"] = True
             fingerprint["provider"] = original_fingerprint.get("provider")
 
+        # Phase 4: Security Analyzers (SSL checks now targeting the landing host)
         ssl_data = inspect_ssl(target_hostname)
-        # FIX: Run lexical analysis on the final destination, not the shortener
         lexical = check_lexical_risk(target_url, target_hostname)
         content_data = inspect_content(trace.get("html_content"), target_url, target_hostname)
 
-        # FIX: Check reputation and IP intel on the final destination
         reputation, ip_intel = await asyncio.gather(
             check_domain_reputation(target_url),
             check_ip_intel(target_url)
         )
-
+        
     except socket.gaierror:
         return {
             "url": request.url,

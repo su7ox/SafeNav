@@ -57,8 +57,25 @@ def calculate_risk_score(scan_results: dict) -> dict:
         
     # --- GLOBAL CONTEXT FOR GUARDS ---
     ip_data = scan_results.get("ip_intel", {})
+    
     # --- 1. Lexical / URL Checks ---
     url = scan_results.get('url', '').lower()
+    
+    # ==========================================
+    # 🚨 NEW: CRITICAL THREAT PENALTIES
+    # ==========================================
+    # Use fallback .get() in case the dictionary is flat or nested
+    lexical_data = scan_results.get("lexical", scan_results)
+    
+    if lexical_data.get("has_dangerous_scheme"):
+        add_risk(80, "Dangerous Scheme (Code Execution Risk)", "lexical")
+        
+    if lexical_data.get("has_embedded_credentials"):
+        add_risk(60, "Embedded Credentials Detected (Spoofing Risk)", "lexical")
+        
+    if lexical_data.get("is_suspicious_download"):
+        add_risk(50, "Direct File Download Detected (.exe, .apk, etc.)", "lexical")
+    # ==========================================
     
     # 🚀 ENTERPRISE UPGRADE: Dynamically check the Top 100k memory cache
     is_major = trust_manager.is_major_domain(url)
@@ -77,6 +94,7 @@ def calculate_risk_score(scan_results: dict) -> dict:
             w for w in warnings 
             if "SANs" not in w and "phishing kit signal" not in w and "CT Log" not in w
         ]
+        
     # Contextual IP Evaluation
     hostname = urllib.parse.urlparse(url).hostname or ""
     ip_eval = evaluate_ip_risk(hostname)
@@ -139,8 +157,8 @@ def calculate_risk_score(scan_results: dict) -> dict:
             add_risk(15, "CT logs missing (Hidden cert or crt.sh API lag)", "ssl")    
             
     if any("Abnormally Short" in flag for flag in ssl_warnings):
-        add_risk(15, "Certificate lifespan is abnormally short", "ssl")
-        
+        add_risk(15, "Certificate lifespan is abnormally short", "ssl")  
+
     # --- 3. IP Intelligence & Reputation ---
     if scan_results.get('is_blacklisted', False):
         add_risk(100, "Domain is explicitly flagged on a threat blacklist", "reputation")
