@@ -7,7 +7,6 @@ from langsmith import trace
 from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
@@ -118,7 +117,7 @@ async def analyze_url(
         validate_target_ip(hostname)
         
         # Phase 2: Trace redirects to track the final landing target
-        trace = await trace_redirects(normalized_url)
+        trace = trace_redirects(normalized_url)
         target_url = trace.get("final_destination", normalized_url)
         target_hostname = urlparse(target_url).hostname or hostname
 
