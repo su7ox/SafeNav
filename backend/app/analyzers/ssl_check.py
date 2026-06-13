@@ -98,7 +98,7 @@ def fetch_ct_logs(hostname: str) -> dict:
         try:
             resp = requests.get(
                 f"https://crt.sh/?q=%.{base_domain}&output=json",
-                timeout=6,
+                timeout=15,
             )
             if resp.status_code == 200:
                 entries = resp.json()

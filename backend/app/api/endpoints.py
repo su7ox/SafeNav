@@ -1,7 +1,7 @@
 import socket
 import ipaddress
 import asyncio
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from langsmith import trace
 from pydantic import BaseModel, EmailStr
@@ -29,7 +29,7 @@ from app.pre_checks.fingerprinting import identify_link_type
 from app.pre_checks.tracing import trace_redirects
 
 # Analyzers
-from app.analyzers.ssl_check import inspect_ssl,fetch_ct_logs, merge_ct_results
+from app.analyzers.ssl_check import inspect_ssl, fetch_ct_logs, merge_ct_results
 from app.analyzers.reputation import check_domain_reputation
 from app.analyzers.lexical import check_lexical_risk
 from app.analyzers.content_scan import inspect_content
@@ -69,7 +69,6 @@ async def get_current_user(
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # SQLAlchemy Query replacing MongoDB's find_one
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
@@ -127,6 +126,7 @@ async def login(
 @router.post("/scan")
 async def analyze_url(
     request: ScanRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -159,10 +159,8 @@ async def analyze_url(
         cached_domain = ScanCache.get_domain_cache(target_hostname)
 
         if cached_domain:
-            print(
-                f"🛡️ DOMAIN CACHE HIT - Using saved Network Data for {target_hostname}"
-            )
-            # Pull heavy network data from Redis instantly
+            print(f" DOMAIN CACHE HIT - Using saved Network Data for {target_hostname}")
+
             ssl_data = cached_domain["ssl_data"]
             ip_intel = cached_domain["ip_intel"]
             reputation = cached_domain["reputation"]
@@ -181,11 +179,26 @@ async def analyze_url(
                 f"🔍 FULL SCAN - Running all network modules CONCURRENTLY for {target_hostname}"
             )
 
+            ct_data = ScanCache.get_ct_cache(target_hostname)
+            if not ct_data:
+
+                background_tasks.add_task(background_fetch_ct, target_hostname)
+                ct_data = {
+                    "status": "pending_background_fetch",
+                    "ct_log_count": 0,
+                    "ct_earliest_seen": "Pending background fetch...",
+                    "ct_latest_seen": "Pending background fetch...",
+                    "ct_check_failed": False,
+                    "logs": [],
+                }
+            else:
+                print(f"⚡ CT CACHE HIT - Loaded background logs for {target_hostname}")
+
             with ExecutionTimer("Total Concurrent Module Execution"):
-                ssl_data, ct_data, lexical, content_data, reputation, ip_intel = (
+
+                ssl_data, lexical, content_data, reputation, ip_intel = (
                     await asyncio.gather(
                         asyncio.to_thread(inspect_ssl, target_hostname),
-                        asyncio.to_thread(fetch_ct_logs, target_hostname),
                         asyncio.to_thread(
                             check_lexical_risk, target_url, target_hostname
                         ),
@@ -199,9 +212,9 @@ async def analyze_url(
                         check_ip_intel(target_url),
                     )
                 )
- 
+
             ssl_data = merge_ct_results(ssl_data, ct_data)
- 
+
             ScanCache.set_domain_cache(target_hostname, ip_intel, ssl_data, reputation)
 
     except socket.gaierror:
@@ -425,3 +438,23 @@ async def get_scan_history(
     except Exception as e:
         print(f"History Error: {e}")
         raise HTTPException(status_code=500, detail="Could not fetch history")
+
+
+async def background_fetch_ct(hostname: str):
+    """
+    Fired by FastAPI BackgroundTasks to fetch heavy crt.sh logs asynchronously.
+    Does not block the user's API response.
+    """
+    try:
+        print(f"[BACKGROUND] Starting heavy CT log fetch for {hostname}...")
+        # Push to thread so the background worker doesn't freeze the event loop
+        ct_data = await asyncio.to_thread(fetch_ct_logs, hostname)
+
+        if ct_data and ct_data.get("status") != "failed":
+            ScanCache.set_ct_cache(hostname, ct_data)
+            print(f"[BACKGROUND ✅] Successfully cached massive CT logs for {hostname}")
+        else:
+            print(f"[BACKGROUND ❌] crt.sh returned no data or failed for {hostname}")
+
+    except Exception as e:
+        print(f"[BACKGROUND ⚠️] Failed to fetch CT logs for {hostname}: {e}")
