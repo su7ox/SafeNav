@@ -4,48 +4,137 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urlparse
-
+from app.utils.timer import ExecutionTimer
 from bs4 import BeautifulSoup, Tag
-
 
 _SCRIPT_HEAVY_THRESHOLD: int = 5
 _IFRAME_SUSPICIOUS_THRESHOLD: int = 3
 _HIDDEN_INPUT_SUSPICIOUS_THRESHOLD: int = 5
 
-_FINANCIAL_KEYWORDS: frozenset[str] = frozenset({
-    "bank", "banking", "payment", "wallet", "crypto", "bitcoin", "ethereum",
-    "transfer", "wire", "iban", "routing", "account number", "credit card",
-    "debit card", "cvv", "paypal", "stripe", "invoice",
-})
-_LOGIN_KEYWORDS: frozenset[str] = frozenset({
-    "login", "log in", "sign in", "signin", "authenticate", "password",
-    "username", "credentials", "forgot password", "reset password",
-})
-_ECOMMERCE_KEYWORDS: frozenset[str] = frozenset({
-    "add to cart", "buy now", "checkout", "shopping cart", "order", "shop",
-    "product", "price", "discount", "sale", "shipping",
-})
-_SCAM_KEYWORDS: frozenset[str] = frozenset({
-    "you have won", "congratulations", "claim your prize", "free gift",
-    "limited time offer", "act now", "winner", "lottery", "selected",
-    "verify your account immediately", "your account has been suspended",
-    "urgent action required",
-})
-_TECH_SUPPORT_KEYWORDS: frozenset[str] = frozenset({
-    "call microsoft", "call apple", "tech support", "your computer is infected",
-    "virus detected", "call now", "toll free", "1-800",
-})
-_ADULT_KEYWORDS: frozenset[str] = frozenset({
-    "adult", "18+", "xxx", "porn", "nude", "explicit", "onlyfans",
-})
-_GAMBLING_KEYWORDS: frozenset[str] = frozenset({
-    "casino", "poker", "slots", "betting", "wager", "odds", "sportsbook",
-    "blackjack", "roulette",
-})
-_DOWNLOAD_EXTENSIONS: frozenset[str] = frozenset({
-    ".exe", ".msi", ".bat", ".ps1", ".sh", ".apk", ".ipa", ".dmg",
-    ".iso", ".img", ".zip", ".rar", ".7z", ".tar", ".gz", ".docm", ".xlsm",
-})
+_FINANCIAL_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "bank",
+        "banking",
+        "payment",
+        "wallet",
+        "crypto",
+        "bitcoin",
+        "ethereum",
+        "transfer",
+        "wire",
+        "iban",
+        "routing",
+        "account number",
+        "credit card",
+        "debit card",
+        "cvv",
+        "paypal",
+        "stripe",
+        "invoice",
+    }
+)
+_LOGIN_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "login",
+        "log in",
+        "sign in",
+        "signin",
+        "authenticate",
+        "password",
+        "username",
+        "credentials",
+        "forgot password",
+        "reset password",
+    }
+)
+_ECOMMERCE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "add to cart",
+        "buy now",
+        "checkout",
+        "shopping cart",
+        "order",
+        "shop",
+        "product",
+        "price",
+        "discount",
+        "sale",
+        "shipping",
+    }
+)
+_SCAM_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "you have won",
+        "congratulations",
+        "claim your prize",
+        "free gift",
+        "limited time offer",
+        "act now",
+        "winner",
+        "lottery",
+        "selected",
+        "verify your account immediately",
+        "your account has been suspended",
+        "urgent action required",
+    }
+)
+_TECH_SUPPORT_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "call microsoft",
+        "call apple",
+        "tech support",
+        "your computer is infected",
+        "virus detected",
+        "call now",
+        "toll free",
+        "1-800",
+    }
+)
+_ADULT_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "adult",
+        "18+",
+        "xxx",
+        "porn",
+        "nude",
+        "explicit",
+        "onlyfans",
+    }
+)
+_GAMBLING_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "casino",
+        "poker",
+        "slots",
+        "betting",
+        "wager",
+        "odds",
+        "sportsbook",
+        "blackjack",
+        "roulette",
+    }
+)
+_DOWNLOAD_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".exe",
+        ".msi",
+        ".bat",
+        ".ps1",
+        ".sh",
+        ".apk",
+        ".ipa",
+        ".dmg",
+        ".iso",
+        ".img",
+        ".zip",
+        ".rar",
+        ".7z",
+        ".tar",
+        ".gz",
+        ".docm",
+        ".xlsm",
+    }
+)
 
 
 @dataclass(slots=True)
@@ -79,7 +168,9 @@ def _extract_visible_text(soup: BeautifulSoup) -> str:
     return soup.get_text(separator=" ", strip=True).lower()
 
 
-def _classify_content(text: str, soup: BeautifulSoup, parsed_url) -> tuple[str, Optional[str]]:
+def _classify_content(
+    text: str, soup: BeautifulSoup, parsed_url
+) -> tuple[str, Optional[str]]:
     has_password = bool(soup.find("input", {"type": "password"}))
 
     if any(k in text for k in _SCAM_KEYWORDS):
@@ -198,69 +289,78 @@ def _score_contribution(report: ContentReport) -> int:
         score += 15
     if report.iframe_count > _IFRAME_SUSPICIOUS_THRESHOLD:
         score += 15
-    if report.content_category in ("Scam / Fraud Page", "Tech Support Scam", "Malware Distribution"):
+    if report.content_category in (
+        "Scam / Fraud Page",
+        "Tech Support Scam",
+        "Malware Distribution",
+    ):
         score += 50
     return min(score, 100)
 
 
-def inspect_content(html_content: str, base_url: str, hostname: str = "") -> ContentReport:
-    report = ContentReport()
+def inspect_content(
+    html_content: str, base_url: str, hostname: str = ""
+) -> ContentReport:
+    with ExecutionTimer("HTML Content Parsing"):
+        report = ContentReport()
 
-    if not html_content or not html_content.strip():
-        report.warning_flags.append("Empty Response Body — possible bot detection or parked domain")
+        if not html_content or not html_content.strip():
+            report.warning_flags.append(
+                "Empty Response Body — possible bot detection or parked domain"
+            )
+            return report
+
+        try:
+            soup = BeautifulSoup(html_content, "html.parser")
+        except Exception as exc:
+            report.warning_flags.append(f"HTML Parse Failure: {exc}")
+            return report
+
+        parsed_url = urlparse(base_url)
+        base_host = parsed_url.netloc
+
+        title_tag = soup.find("title")
+        report.page_title = title_tag.get_text(strip=True) if title_tag else None
+
+        report.script_count = len(soup.find_all("script"))
+        report.iframe_count = len(soup.find_all("iframe"))
+        report.external_resource_count = _count_external_resources(soup, base_host)
+
+        if report.script_count > _SCRIPT_HEAVY_THRESHOLD:
+            report.dynamic_content_detected = True
+            report.warning_flags.append(
+                f"Heavy Dynamic Content ({report.script_count} scripts) — analysis limited to static layer"
+            )
+
+        if report.iframe_count > _IFRAME_SUSPICIOUS_THRESHOLD:
+            report.warning_flags.append(
+                f"Suspicious Iframe Count ({report.iframe_count}) — possible clickjacking or content injection"
+            )
+
+        visible_text = _extract_visible_text(soup)
+        report.content_category, report.content_subcategory = _classify_content(
+            visible_text, soup, parsed_url
+        )
+
+        report.form = _inspect_forms(soup, base_url, parsed_url)
+
+        if report.form.is_insecure_login_form:
+            report.warning_flags.append(
+                "Insecure Login Form — credentials submitted over HTTP or to an external domain"
+            )
+
+        if report.form.form_action_is_external:
+            report.warning_flags.append(
+                f"Form Submits to External Domain: {report.form.form_action}"
+            )
+
+        if hostname:
+            report.brand_impersonation_signals = _detect_brand_impersonation(
+                visible_text, soup, hostname
+            )
+            for signal in report.brand_impersonation_signals:
+                report.warning_flags.append(f"Brand Impersonation Signal: {signal}")
+
+        report.risk_score_contribution = _score_contribution(report)
+
         return report
-
-    try:
-        soup = BeautifulSoup(html_content, "html.parser")
-    except Exception as exc:
-        report.warning_flags.append(f"HTML Parse Failure: {exc}")
-        return report
-
-    parsed_url = urlparse(base_url)
-    base_host = parsed_url.netloc
-
-    title_tag = soup.find("title")
-    report.page_title = title_tag.get_text(strip=True) if title_tag else None
-
-    report.script_count = len(soup.find_all("script"))
-    report.iframe_count = len(soup.find_all("iframe"))
-    report.external_resource_count = _count_external_resources(soup, base_host)
-
-    if report.script_count > _SCRIPT_HEAVY_THRESHOLD:
-        report.dynamic_content_detected = True
-        report.warning_flags.append(
-            f"Heavy Dynamic Content ({report.script_count} scripts) — analysis limited to static layer"
-        )
-
-    if report.iframe_count > _IFRAME_SUSPICIOUS_THRESHOLD:
-        report.warning_flags.append(
-            f"Suspicious Iframe Count ({report.iframe_count}) — possible clickjacking or content injection"
-        )
-
-    visible_text = _extract_visible_text(soup)
-    report.content_category, report.content_subcategory = _classify_content(
-        visible_text, soup, parsed_url
-    )
-
-    report.form = _inspect_forms(soup, base_url, parsed_url)
-
-    if report.form.is_insecure_login_form:
-        report.warning_flags.append(
-            "Insecure Login Form — credentials submitted over HTTP or to an external domain"
-        )
-
-    if report.form.form_action_is_external:
-        report.warning_flags.append(
-            f"Form Submits to External Domain: {report.form.form_action}"
-        )
-
-    if hostname:
-        report.brand_impersonation_signals = _detect_brand_impersonation(
-            visible_text, soup, hostname
-        )
-        for signal in report.brand_impersonation_signals:
-            report.warning_flags.append(f"Brand Impersonation Signal: {signal}")
-
-    report.risk_score_contribution = _score_contribution(report)
-
-    return report

@@ -7,23 +7,29 @@ from langsmith import trace
 from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
+
+# SQLAlchemy Imports
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
 
-# --- App Core Imports (Infrastructure) ---
+# Utilities
+from app.utils.timer import ExecutionTimer
+from app.utils.cache_manager import ScanCache
+
+# Core and Models
 from app.core.database import get_db
 from app.core.models import User, ScanHistory, ScanResponseSchema
 from app.core.security import verify_password, get_password_hash, create_access_token
 
-# --- Phase 1: Pre-Checks ---
+# pre-checks
 from app.pre_checks.pre_flight import safe_classify_url
 from app.pre_checks.normalization import normalize_url
 from app.pre_checks.fingerprinting import identify_link_type
 from app.pre_checks.tracing import trace_redirects
 
-# --- Phase 2: Security Analyzers ---
-from app.analyzers.ssl_check import inspect_ssl
+# Analyzers
+from app.analyzers.ssl_check import inspect_ssl,fetch_ct_logs, merge_ct_results
 from app.analyzers.reputation import check_domain_reputation
 from app.analyzers.lexical import check_lexical_risk
 from app.analyzers.content_scan import inspect_content
@@ -31,24 +37,30 @@ from app.analyzers.ip_intel import check_ip_intel
 
 # --- Utilities ---
 from app.utils.scoring import calculate_risk_score
+
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login", auto_error=False)
+
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
+
 class ScanRequest(BaseModel):
     url: str
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+):
     from app.core.security import SECRET_KEY, ALGORITHM
     from jose import jwt, JWTError
-    
+
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-        
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -56,76 +68,87 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+
     # SQLAlchemy Query replacing MongoDB's find_one
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    
+
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
 
 def validate_target_ip(hostname):
     try:
         ip = socket.gethostbyname(hostname)
         ip_obj = ipaddress.ip_address(ip)
         if ip_obj.is_private or ip_obj.is_loopback:
-            raise HTTPException(status_code=400, detail="Scanning internal IPs is prohibited.")
+            raise HTTPException(
+                status_code=400, detail="Scanning internal IPs is prohibited."
+            )
         return True
     except socket.gaierror:
-        pass 
+        pass
     except ValueError:
         pass
     return True
+
+
 @router.post("/register")
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user.email))
     existing_user = result.scalar_one_or_none()
-    
+
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
     hashed_pw = get_password_hash(user.password)
-    
+
     new_user = User(email=user.email, hashed_password=hashed_pw)
     db.add(new_user)
     await db.commit()
     return {"message": "User registered successfully"}
+
+
 @router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
-    
-    # Verify password against the hashed password on the model
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
-    
+
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
 @router.post("/scan")
 async def analyze_url(
     request: ScanRequest,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     if not request.url:
         raise HTTPException(status_code=400, detail="URL is required")
-        
+    target_url_raw = str(request.url)
+    cached_result = ScanCache.get_url_cache(target_url_raw)
+    if cached_result:
+        print(f"⚡ URL CACHE HIT - Skipping all analysis for {target_url_raw}!")
+        return cached_result
+
     try:
-        # Phase 1: Pre-flight Normalization on original input
         normalized_url, hostname, norm_flags = normalize_url(request.url)
         validate_target_ip(hostname)
-        
-        # Phase 2: Trace redirects to track the final landing target
+
         trace = trace_redirects(normalized_url)
         target_url = trace.get("final_destination", normalized_url)
         target_hostname = urlparse(target_url).hostname or hostname
 
-        # Safety Guard: Ensure resolved destination IP isn't reaching a local/private network
         if target_hostname != hostname:
             validate_target_ip(target_hostname)
 
-        # Phase 3: Infrastructure Identification (Fingerprinting)
         original_fingerprint = identify_link_type(normalized_url, hostname)
         fingerprint = identify_link_type(target_url, target_hostname)
 
@@ -133,23 +156,61 @@ async def analyze_url(
             fingerprint["is_shortened"] = True
             fingerprint["provider"] = original_fingerprint.get("provider")
 
-        # Phase 4: Security Analyzers (SSL checks now targeting the landing host)
-        ssl_data = inspect_ssl(target_hostname)
-        lexical = check_lexical_risk(target_url, target_hostname)
-        content_data = inspect_content(trace.get("html_content"), target_url, target_hostname)
+        cached_domain = ScanCache.get_domain_cache(target_hostname)
 
-        reputation, ip_intel = await asyncio.gather(
-            check_domain_reputation(target_url),
-            check_ip_intel(target_url)
-        )
-        
+        if cached_domain:
+            print(
+                f"🛡️ DOMAIN CACHE HIT - Using saved Network Data for {target_hostname}"
+            )
+            # Pull heavy network data from Redis instantly
+            ssl_data = cached_domain["ssl_data"]
+            ip_intel = cached_domain["ip_intel"]
+            reputation = cached_domain["reputation"]
+
+            lexical, content_data = await asyncio.gather(
+                asyncio.to_thread(check_lexical_risk, target_url, target_hostname),
+                asyncio.to_thread(
+                    inspect_content,
+                    trace.get("html_content"),
+                    target_url,
+                    target_hostname,
+                ),
+            )
+        else:
+            print(
+                f"🔍 FULL SCAN - Running all network modules CONCURRENTLY for {target_hostname}"
+            )
+
+            with ExecutionTimer("Total Concurrent Module Execution"):
+                ssl_data, ct_data, lexical, content_data, reputation, ip_intel = (
+                    await asyncio.gather(
+                        asyncio.to_thread(inspect_ssl, target_hostname),
+                        asyncio.to_thread(fetch_ct_logs, target_hostname),
+                        asyncio.to_thread(
+                            check_lexical_risk, target_url, target_hostname
+                        ),
+                        asyncio.to_thread(
+                            inspect_content,
+                            trace.get("html_content"),
+                            target_url,
+                            target_hostname,
+                        ),
+                        check_domain_reputation(target_url),
+                        check_ip_intel(target_url),
+                    )
+                )
+ 
+            ssl_data = merge_ct_results(ssl_data, ct_data)
+ 
+            ScanCache.set_domain_cache(target_hostname, ip_intel, ssl_data, reputation)
+
     except socket.gaierror:
         return {
             "url": request.url,
             "risk_score": 0,
             "risk_level": "Unreachable",
             "details": {"error": "Domain does not exist"},
-            "scan_time": datetime.utcnow().isoformat()
+            "scan_time": datetime.utcnow().isoformat(),
         }
     except Exception as e:
         print(f"Scan Error: {e}")
@@ -227,7 +288,6 @@ async def analyze_url(
 
     details = {
         "ssl_security": ssl_data,
-
         "ip_intelligence": {
             "ip_address": ip_intel.get("ip_address", "Unknown"),
             "hosting_country": f"{ip_intel.get('hosting_country', 'Unknown')} {ip_intel.get('hosting_flag', '') or ''}".strip(),
@@ -237,14 +297,14 @@ async def analyze_url(
             "registrant_country": f"{ip_intel.get('registrant_country', 'Unknown')} {ip_intel.get('registrant_flag', '') or ''}".strip(),
             "country_mismatch": "Yes" if ip_intel.get("country_mismatch") else "No",
         },
-
         "phishing_checks": {
             "typosquatting": "Yes" if is_typosquat else "No",
-            "brand_similarity": brand_detected.title() if brand_detected != "None" else "None",
+            "brand_similarity": (
+                brand_detected.title() if brand_detected != "None" else "None"
+            ),
             "suspicious_keywords": "Yes" if suspicious_kw else "No",
             "homograph_attack": "Yes" if is_homograph else "No",
         },
-
         "domain_reputation": {
             "domain_age": dom_age_display,
             "domain_status": dom_status,
@@ -252,7 +312,6 @@ async def analyze_url(
             "registrar_trust": "Normal",
             "whois_privacy": "Yes" if whois_privacy else "No",
         },
-
         "link_structure": {
             "platform": fingerprint.get("platform", "Unknown").title(),
             "service_type": service_type,
@@ -262,20 +321,22 @@ async def analyze_url(
             "is_ip_based": "Yes" if fingerprint.get("is_ip_based") else "No",
             "obfuscation": "Yes" if is_obfuscated else "No",
         },
-
         "redirect_analysis": {
             "hop_count": hops,
             "cross_domain": "Yes" if cross_domain else "No",
             "final_destination": trace.get("final_url", normalized_url),
             "redirect_loop": "No",
         },
-
         "content_analysis": {
             "category": content_data.content_category,
             "subcategory": content_data.content_subcategory or "None",
             "page_title": content_data.page_title or "Unknown",
-            "insecure_login_form": "Yes" if content_data.form.is_insecure_login_form else "No",
-            "external_form_action": "Yes" if content_data.form.form_action_is_external else "No",
+            "insecure_login_form": (
+                "Yes" if content_data.form.is_insecure_login_form else "No"
+            ),
+            "external_form_action": (
+                "Yes" if content_data.form.form_action_is_external else "No"
+            ),
             "dynamic_content": "Yes" if content_data.dynamic_content_detected else "No",
             "brand_impersonation": content_data.brand_impersonation_signals or [],
             "warning_flags": content_data.warning_flags,
@@ -283,7 +344,9 @@ async def analyze_url(
     }
 
     scan_time = datetime.utcnow()
-    has_ssl_issue = not ssl_data.get("is_valid", True) or len(ssl_data.get("warning_flags", [])) > 0
+    has_ssl_issue = (
+        not ssl_data.get("is_valid", True) or len(ssl_data.get("warning_flags", [])) > 0
+    )
 
     new_scan = ScanHistory(
         url=normalized_url,
@@ -294,14 +357,14 @@ async def analyze_url(
         reasoning=risk_assessment["risk_factors"],
         scan_time=scan_time,
         user_email=user.email,
-        is_guest=False
+        is_guest=False,
     )
 
     db.add(new_scan)
     await db.commit()
     await db.refresh(new_scan)
 
-    return {
+    final_json_response = {
         "id": str(new_scan.id),
         "url": normalized_url,
         "risk_score": risk_assessment["final_score"],
@@ -312,18 +375,25 @@ async def analyze_url(
         "ssl_details": ssl_data,
         "scan_time": scan_time.isoformat(),
         "user_email": user.email,
-        "is_guest": False
+        "is_guest": False,
     }
-@router.post("/deep-scan")
+    ScanCache.set_url_cache(target_url_raw, final_json_response)
+
+    return final_json_response
+
+
 async def deep_scan(request: ScanRequest, user: User = Depends(get_current_user)):
     return {
         "status": "Deep Scan Initiated",
-        "user": user.email, 
-        "message": "Dynamic sandbox analysis started (Phase 2 feature)"
+        "user": user.email,
+        "message": "Dynamic sandbox analysis started (Phase 2 feature)",
     }
 
+
 @router.get("/history")
-async def get_scan_history(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_scan_history(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
     try:
         query = (
             select(ScanHistory)
@@ -331,24 +401,26 @@ async def get_scan_history(user: User = Depends(get_current_user), db: AsyncSess
             .order_by(desc(ScanHistory.scan_time))
             .limit(20)
         )
-        
+
         result = await db.execute(query)
         history = result.scalars().all()
 
         cleaned_history = []
         for item in history:
-            cleaned_history.append({
-                "id": str(item.id),
-                "url": item.url,
-                "risk_score": item.risk_score,
-                "risk_level": item.risk_level,
-                "has_ssl_issue": item.has_ssl_issue,
-                "details": item.details,
-                "reasoning": item.reasoning,
-                "scan_time": item.scan_time.isoformat(),
-                "user_email": item.user_email
-            })
-            
+            cleaned_history.append(
+                {
+                    "id": str(item.id),
+                    "url": item.url,
+                    "risk_score": item.risk_score,
+                    "risk_level": item.risk_level,
+                    "has_ssl_issue": item.has_ssl_issue,
+                    "details": item.details,
+                    "reasoning": item.reasoning,
+                    "scan_time": item.scan_time.isoformat(),
+                    "user_email": item.user_email,
+                }
+            )
+
         return cleaned_history
     except Exception as e:
         print(f"History Error: {e}")
