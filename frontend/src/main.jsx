@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 // #region agent log
 try {
@@ -66,12 +67,14 @@ try {
     }).catch(() => {})
   })
 } catch (_) {}
-// #endregion
 
+// Combine EVERYTHING into this single createRoot call
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <GoogleOAuthProvider clientId="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com">
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </GoogleOAuthProvider>
   </StrictMode>,
 )

@@ -1,35 +1,30 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { ResultsGrid } from "./components/ResultsGrid";
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import { Toaster, toast } from "react-hot-toast";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/LandingPage";
 import HistoryPage from "./pages/History";
+import AuthPage from "./pages/AuthPage";
 import AboutUs from "./pages/AboutUs";
 import {
   ShieldCheck,
   AlertTriangle,
   Search,
-  Lock,
-  History,
-  LogOut,
   Loader2,
   Globe,
-  Sun,
-  Moon,
   XOctagon,
   Activity,
   X,
-  Home,
-  Info,
 } from "lucide-react";
 import "./App.css";
 
 const API_URL = "http://localhost:8000/api/v1";
 
 // ─────────────────────────────────────────────
-// SCANNER VIEW  (maps to "/scan")
+// SCANNER VIEW
 // ─────────────────────────────────────────────
 const ScannerView = ({ token, onRequestLogin }) => {
   const [url, setUrl] = useState("");
@@ -44,19 +39,18 @@ const ScannerView = ({ token, onRequestLogin }) => {
     if (h === "127.0.0.1" || h === "::1") return true;
     if (h === "0.0.0.0") return true;
 
-    // IPv4 private, loopback, link-local, CGNAT
     const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (!ipv4) return false;
     const o = ipv4.slice(1).map((n) => Number(n));
     if (o.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return false;
 
     const [a, b] = o;
-    if (a === 10) return true; // 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-    if (a === 192 && b === 168) return true; // 192.168.0.0/16
-    if (a === 169 && b === 254) return true; // 169.254.0.0/16
-    if (a === 127) return true; // 127.0.0.0/8
-    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 127) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
 
     return false;
   };
@@ -114,7 +108,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
         }
       }
     }
-
     setLoading(false);
   };
 
@@ -177,7 +170,6 @@ const ScannerView = ({ token, onRequestLogin }) => {
                     )}
                   </div>
                   <div className="verdict-text-group">
-                    {/* FIX 1: Support both verdict AND risk_level */}
                     <h2
                       className={
                         result.risk_score > 69
@@ -265,29 +257,39 @@ const ScannerView = ({ token, onRequestLogin }) => {
                   )}
               </div>
 
-              {/* --- NEW: LINK SHORTENER WARNING --- */}
-              {result.details?.link_structure?.link_category === "Shortened" && (
-                <div style={{
-                  marginTop: '12px',
-                  padding: '12px 14px',
-                  backgroundColor: 'rgba(255, 183, 3, 0.1)',
-                  border: '1px solid rgba(255, 183, 3, 0.25)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px'
-                }}>
-                  {/* <span style={{ fontSize: '18px', marginTop: '2px' }}>🔗</span> */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {result.details?.link_structure?.link_category ===
+                "Shortened" && (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    padding: "12px 14px",
+                    backgroundColor: "rgba(255, 183, 3, 0.1)",
+                    border: "1px solid rgba(255, 183, 3, 0.25)",
+                    borderRadius: "8px",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
                     <span>
-                      <strong>Shortener Detected:</strong> This link originally started at <strong style={{ color: 'var(--cyan)' }}>{result.details.link_structure.original_domain}</strong>
+                      <strong>Shortener Detected:</strong> This link originally
+                      started at{" "}
+                      <strong style={{ color: "var(--cyan)" }}>
+                        {result.details.link_structure.original_domain}
+                      </strong>
                     </span>
                   </div>
                 </div>
               )}
-              {/* ----------------------------------- */}
 
               <div className="ai-insight-content">
                 {(result.risk_factors || result.reasoning || []).map((r, i) => (
@@ -394,14 +396,11 @@ const AuthModal = ({ onClose, onLogin, title }) => {
 // ROOT APP  —  Router Shell
 // ─────────────────────────────────────────────
 const App = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [token, setToken] = useState(localStorage.getItem("safenav_token"));
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMessage, setAuthMessage] = useState("Login");
   const [darkMode, setDarkMode] = useState(false);
-
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Restore theme on mount
   useEffect(() => {
@@ -410,26 +409,6 @@ const App = () => {
       setDarkMode(true);
       document.documentElement.setAttribute("data-theme", "dark");
     }
-  }, []);
-
-  // Close mobile menu on outside click
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (isMenuOpen && !e.target.closest(".nav-menu-wrapper")) {
-        setIsMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isMenuOpen]);
-
-  // Close mobile menu on viewport resize to desktop width
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 768) setIsMenuOpen(false);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const toggleDarkMode = () => {
@@ -462,19 +441,6 @@ const App = () => {
     toast("Logged out.", { icon: "👋" });
   };
 
-  const navLinks = [
-    { path: "/", label: "Home", Icon: Home },
-    { path: "/scan", label: "Scanner", Icon: ShieldCheck },
-    { path: "/history", label: "History", Icon: History },
-    { path: "/dashboard", label: "Dashboard", Icon: Activity },
-    { path: "/about", label: "About", Icon: Info },
-  ];
-
-  const isActive = (path) =>
-    path === "/"
-      ? location.pathname === "/"
-      : location.pathname.startsWith(path);
-
   return (
     <div className="app-container">
       {/* Global toast notifications */}
@@ -489,122 +455,14 @@ const App = () => {
         }}
       />
 
-      {/* ── NAVIGATION BAR ─────────────────────────────────── */}
-      <nav className="nav-bar">
-        <div className="nav-content">
-          {/* Logo */}
-          <button className="nav-logo" onClick={() => navigate("/")}>
-            <div className="logo-icon-wrap">
-              <ShieldCheck size={18} className="text-white" />
-            </div>
-            <span className="logo-text">SafeNav</span>
-          </button>
-
-          {/* Desktop nav links */}
-          <div className="nav-links-desktop">
-            {navLinks.map(({ path, label, Icon }) => (
-              <button
-                key={path}
-                onClick={() => navigate(path)}
-                className={`nav-link-btn ${isActive(path) ? "active" : ""}`}
-              >
-                <Icon size={15} />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Right actions */}
-          <div className="nav-actions">
-            {/* Theme toggle */}
-            <button
-              className="icon-button theme-toggle"
-              onClick={toggleDarkMode}
-              title="Toggle theme"
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            {/* Auth button (desktop) */}
-            <div className="nav-auth-desktop">
-              {token ? (
-                <button className="auth-chip logout" onClick={handleLogout}>
-                  <LogOut size={14} /> Logout
-                </button>
-              ) : (
-                <button
-                  className="auth-chip login"
-                  onClick={() => triggerAuthModal("Login")}
-                >
-                  <Lock size={14} /> Login
-                </button>
-              )}
-            </div>
-
-            {/* Hamburger (mobile only) */}
-            <div className="nav-menu-wrapper">
-              <button
-                className={`hamburger-btn ${isMenuOpen ? "open" : ""}`}
-                onClick={() => setIsMenuOpen((o) => !o)}
-                aria-label="Toggle menu"
-                aria-expanded={isMenuOpen}
-              >
-                <span className="ham-bar bar1" />
-                <span className="ham-bar bar2" />
-                <span className="ham-bar bar3" />
-              </button>
-
-              {/* Mobile dropdown */}
-              {isMenuOpen && (
-                <div className="mobile-dropdown">
-                  <div className="mobile-dropdown-links">
-                    {navLinks.map(({ path, label, Icon }) => (
-                      <button
-                        key={path}
-                        onClick={() => {
-                          navigate(path);
-                          setIsMenuOpen(false);
-                        }}
-                        className={`mobile-nav-item ${isActive(path) ? "active" : ""}`}
-                      >
-                        <Icon size={17} />
-                        {label}
-                        {isActive(path) && (
-                          <span className="mobile-active-dot" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mobile-dropdown-divider" />
-                  <div className="mobile-dropdown-auth">
-                    {token ? (
-                      <button
-                        className="mobile-auth-btn logout"
-                        onClick={() => {
-                          handleLogout();
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        <LogOut size={16} /> Logout
-                      </button>
-                    ) : (
-                      <button
-                        className="mobile-auth-btn login"
-                        onClick={() => {
-                          triggerAuthModal("Login");
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        <Lock size={16} /> Login
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* ── SEPARATED NAVBAR COMPONENT ─────────────────────── */}
+      <Navbar
+        token={token}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+        handleLogout={handleLogout}
+        triggerAuthModal={triggerAuthModal}
+      />
 
       {/* ── MAIN CONTENT — Route Definitions ───────────────── */}
       <main className="main-content">
@@ -615,6 +473,7 @@ const App = () => {
               <LandingPage token={token} onRequestLogin={triggerAuthModal} />
             }
           />
+          <Route path="/auth" element={<AuthPage />} />
           <Route
             path="/dashboard"
             element={
