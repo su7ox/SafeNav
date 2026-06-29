@@ -2,9 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.api.endpoints import router as api_router
+from app.api.auth import router as auth_router
 from app.core.database import engine, Base
-from app.core.models import User, ScanHistory 
+from app.core.models import User, ScanHistory
 from app.core.trust_manager import trust_manager
+
 
 # --- LIFECYCLE MANAGEMENT ---
 @asynccontextmanager
@@ -38,7 +40,7 @@ app = FastAPI(title="SafeNav API", version="1.0", lifespan=lifespan)
 
 # --- CORS SETTINGS ---
 origins = [
-    "http://localhost:5173", 
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
 ]
@@ -53,8 +55,11 @@ app.add_middleware(
 
 # --- INCLUDE ROUTES ---
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1/auth")
 
 
 @app.get("/")
 def read_root():
-    return {"message": "SafeNav Backend is Running (PostgreSQL & Enterprise Trust Feed enabled)"}
+    return {
+        "message": "SafeNav Backend is Running (PostgreSQL & Enterprise Trust Feed enabled)"
+    }

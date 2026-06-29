@@ -27,6 +27,7 @@ import {
   ShieldAlert,
   FileSearch,
   Wifi,
+  Users,
 } from "lucide-react";
 import { fetchHistory } from "../services/api";
 
@@ -727,6 +728,104 @@ const styles = `
     box-shadow: 0 8px 24px rgba(0,229,255,0.25);
   }
 
+  /* ── Admin Panel (Hidden by default) ──────────── */
+  .db-admin-card {
+    padding: 24px;
+    min-height: 400px;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: db-rise 0.4s ease forwards;
+  }
+
+  .db-admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .db-admin-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #e8f0fe;
+    letter-spacing: -0.02em;
+  }
+
+  .db-admin-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .db-admin-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    background: rgba(0,229,255,0.015);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .db-admin-row:hover {
+    background: rgba(0,229,255,0.04);
+    border-color: var(--border-s);
+  }
+
+  .db-admin-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--navy-3);
+    border: 1px solid var(--border-s);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .db-admin-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .db-admin-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .db-admin-name {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+
+  .db-admin-email {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+
+  .db-admin-badge {
+    padding: 4px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    border-radius: 6px;
+    border: 1px solid rgba(0,229,255,0.2);
+    background: var(--cyan-dim2);
+    color: var(--cyan);
+  }
+
   /* ── Keyframes ────────────────────────────────── */
   @keyframes db-rise {
     from { opacity: 0; transform: translateY(14px); }
@@ -736,18 +835,18 @@ const styles = `
 
 // ─── Palette for donut ────────────────────────────────────────────────────────
 const PIE_COLORS = {
-  Safe:     "#06d6a0",
-  Warning:  "#ffb703",
-  High:     "#ff8c42",
+  Safe: "#06d6a0",
+  Warning: "#ffb703",
+  High: "#ff8c42",
   Critical: "#ff4d6d",
 };
 
 // ─── Category colours ─────────────────────────────────────────────────────────
 const CAT_META = {
-  lexical:    { label: "Lexical",    color: "#00e5ff", icon: Globe },
-  ssl:        { label: "SSL/TLS",    color: "#06d6a0", icon: Lock },
+  lexical: { label: "Lexical", color: "#00e5ff", icon: Globe },
+  ssl: { label: "SSL/TLS", color: "#06d6a0", icon: Lock },
   reputation: { label: "Reputation", color: "#ff8c42", icon: ShieldAlert },
-  content:    { label: "Content",    color: "#ff4d6d", icon: FileSearch },
+  content: { label: "Content", color: "#ff4d6d", icon: FileSearch },
 };
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
@@ -757,7 +856,9 @@ const CustomTooltip = ({ active, payload }) => {
   return (
     <div className="db-tooltip">
       <div className="db-tooltip-label">{name}</div>
-      <div style={{ color: PIE_COLORS[name], fontWeight: 600 }}>{value} scan{value !== 1 ? "s" : ""}</div>
+      <div style={{ color: PIE_COLORS[name], fontWeight: 600 }}>
+        {value} scan{value !== 1 ? "s" : ""}
+      </div>
     </div>
   );
 };
@@ -766,15 +867,20 @@ const CustomTooltip = ({ active, payload }) => {
 const useCountUp = (target, duration = 900) => {
   const [val, setVal] = useState(0);
   useEffect(() => {
-    if (target === 0) { setVal(0); return; }
+    if (target === 0) {
+      setVal(0);
+      return;
+    }
     const steps = 40;
     const increment = target / steps;
     const interval = duration / steps;
     let current = 0;
     const timer = setInterval(() => {
       current += increment;
-      if (current >= target) { setVal(target); clearInterval(timer); }
-      else setVal(Math.floor(current));
+      if (current >= target) {
+        setVal(target);
+        clearInterval(timer);
+      } else setVal(Math.floor(current));
     }, interval);
     return () => clearInterval(timer);
   }, [target, duration]);
@@ -815,27 +921,40 @@ const StatCard = ({ colorClass, icon, tag, value, label, pct }) => {
 
 // ─── Category breakdown card (averaged across all scans) ─────────────────────
 const CategoryBreakdownCard = ({ history }) => {
-  const scansWithBreakdown = history.filter(s => s.details?.category_breakdown);
+  const scansWithBreakdown = history.filter(
+    (s) => s.details?.category_breakdown,
+  );
   if (scansWithBreakdown.length === 0) return null;
 
   const avg = (key) => {
-    const sum = scansWithBreakdown.reduce((acc, s) => acc + (s.details.category_breakdown[key] || 0), 0);
+    const sum = scansWithBreakdown.reduce(
+      (acc, s) => acc + (s.details.category_breakdown[key] || 0),
+      0,
+    );
     return Math.round(sum / scansWithBreakdown.length);
   };
 
   const cats = ["lexical", "ssl", "reputation", "content"];
-  const avgs = cats.map(k => ({ key: k, val: avg(k) }));
-  const maxVal = Math.max(...avgs.map(c => c.val), 1);
+  const avgs = cats.map((k) => ({ key: k, val: avg(k) }));
+  const maxVal = Math.max(...avgs.map((c) => c.val), 1);
 
   return (
     <div className="db-card db-catbar-card">
-      <div className="db-card-label">// avg risk by category · {scansWithBreakdown.length} scans</div>
+      <div className="db-card-label">
+        // avg risk by category · {scansWithBreakdown.length} scans
+      </div>
       <div className="db-catbar-grid">
         {avgs.map(({ key, val }) => {
           const meta = CAT_META[key];
           const Icon = meta.icon;
           return (
-            <CatBar key={key} meta={meta} val={val} maxVal={maxVal} Icon={Icon} />
+            <CatBar
+              key={key}
+              meta={meta}
+              val={val}
+              maxVal={maxVal}
+              Icon={Icon}
+            />
           );
         })}
       </div>
@@ -852,9 +971,14 @@ const CatBar = ({ meta, val, maxVal, Icon }) => {
         <Icon size={11} color={meta.color} />
         {meta.label}
       </div>
-      <div className="db-catbar-avg" style={{ color: meta.color }}>{val}</div>
+      <div className="db-catbar-avg" style={{ color: meta.color }}>
+        {val}
+      </div>
       <div className="db-catbar-track">
-        <div className="db-catbar-fill" style={{ width: `${fillW}%`, background: meta.color }} />
+        <div
+          className="db-catbar-fill"
+          style={{ width: `${fillW}%`, background: meta.color }}
+        />
       </div>
     </div>
   );
@@ -874,9 +998,17 @@ const FeedRow = ({ scan, tierClass, tierLabel, tierIcon, score }) => {
 
   return (
     <div className="db-feed-row">
-      <div className="db-feed-row-main" onClick={() => reasoning.length > 0 && setExpanded(e => !e)}>
+      <div
+        className="db-feed-row-main"
+        onClick={() => reasoning.length > 0 && setExpanded((e) => !e)}
+      >
         <div className="db-feed-url">
-          <a href={scan.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+          <a
+            href={scan.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
             {scan.url}
           </a>
         </div>
@@ -926,7 +1058,7 @@ const tierLabelOf = (scan) => {
   // Prefer backend verdict string, normalise casing
   if (scan.verdict) {
     const v = scan.verdict.toUpperCase();
-    if (["CRITICAL","HIGH","WARNING","SAFE"].includes(v)) return v;
+    if (["CRITICAL", "HIGH", "WARNING", "SAFE"].includes(v)) return v;
   }
   const s = scan.risk_score;
   if (s >= 75) return "CRITICAL";
@@ -945,15 +1077,60 @@ const tierIconOf = (score) => {
 // ─── Main component ───────────────────────────────────────────────────────────
 const Dashboard = ({ token, onRequestLogin }) => {
   const navigate = useNavigate();
-  const [history, setHistory]     = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activePie, setActivePie] = useState(null);
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [loadingAdmin, setLoadingAdmin] = useState(false);
+
+  const fetchAdminUsers = async () => {
+    if (!token) return;
+    setLoadingAdmin(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/admin/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminUsers(data);
+      } else {
+        console.error("Not authorized to view users or bad response.");
+      }
+    } catch (e) {
+      console.error("Failed to fetch admin users:", e);
+    } finally {
+      setLoadingAdmin(false);
+    }
+  };
+
+  const toggleAdminView = () => {
+    const nextState = !isAdminView;
+    setIsAdminView(nextState);
+    if (nextState && adminUsers.length === 0) {
+      fetchAdminUsers();
+    }
+  };
 
   useEffect(() => {
     // #region agent log
-    fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'A',location:'Dashboard.jsx:useEffect(token-check)',message:'Dashboard token check',data:{hasToken:!!token,tokenType:typeof token},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    fetch("http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "30e0a5",
+      },
+      body: JSON.stringify({
+        sessionId: "30e0a5",
+        runId: "pre-fix",
+        hypothesisId: "A",
+        location: "Dashboard.jsx:useEffect(token-check)",
+        message: "Dashboard token check",
+        data: { hasToken: !!token, tokenType: typeof token },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     if (!token) {
       onRequestLogin("Login to view your dashboard");
       navigate("/");
@@ -965,16 +1142,87 @@ const Dashboard = ({ token, onRequestLogin }) => {
     const load = async () => {
       try {
         // #region agent log
-        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'C',location:'Dashboard.jsx:load(start)',message:'Dashboard fetchHistory start',data:{hasToken:!!token,tokenLen:typeof token==='string'?token.length:null},timestamp:Date.now()})}).catch(()=>{});
+        fetch(
+          "http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "30e0a5",
+            },
+            body: JSON.stringify({
+              sessionId: "30e0a5",
+              runId: "pre-fix",
+              hypothesisId: "C",
+              location: "Dashboard.jsx:load(start)",
+              message: "Dashboard fetchHistory start",
+              data: {
+                hasToken: !!token,
+                tokenLen: typeof token === "string" ? token.length : null,
+              },
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
         // #endregion
         const data = await fetchHistory(token);
         // #region agent log
-        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'B',location:'Dashboard.jsx:load(success)',message:'Dashboard fetchHistory success (shape)',data:{isArray:Array.isArray(data),type:typeof data,keys:(data&&typeof data==='object')?Object.keys(data).slice(0,10):null,len:Array.isArray(data)?data.length:null},timestamp:Date.now()})}).catch(()=>{});
+        fetch(
+          "http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "30e0a5",
+            },
+            body: JSON.stringify({
+              sessionId: "30e0a5",
+              runId: "pre-fix",
+              hypothesisId: "B",
+              location: "Dashboard.jsx:load(success)",
+              message: "Dashboard fetchHistory success (shape)",
+              data: {
+                isArray: Array.isArray(data),
+                type: typeof data,
+                keys:
+                  data && typeof data === "object"
+                    ? Object.keys(data).slice(0, 10)
+                    : null,
+                len: Array.isArray(data) ? data.length : null,
+              },
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
         // #endregion
         setHistory(data);
       } catch (err) {
         // #region agent log
-        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'C',location:'Dashboard.jsx:load(catch)',message:'Dashboard fetchHistory error',data:{name:err?.name,message:err?.message,status:err?.response?.status,code:err?.code,hasResponse:!!err?.response},timestamp:Date.now()})}).catch(()=>{});
+        fetch(
+          "http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "30e0a5",
+            },
+            body: JSON.stringify({
+              sessionId: "30e0a5",
+              runId: "pre-fix",
+              hypothesisId: "C",
+              location: "Dashboard.jsx:load(catch)",
+              message: "Dashboard fetchHistory error",
+              data: {
+                name: err?.name,
+                message: err?.message,
+                status: err?.response?.status,
+                code: err?.code,
+                hasResponse: !!err?.response,
+              },
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
         // #endregion
         if (err.response?.status === 401) {
           onRequestLogin("Session expired — please login again");
@@ -984,7 +1232,25 @@ const Dashboard = ({ token, onRequestLogin }) => {
         }
       } finally {
         // #region agent log
-        fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'D',location:'Dashboard.jsx:load(finally)',message:'Dashboard load finally',data:{setLoadingTo:false},timestamp:Date.now()})}).catch(()=>{});
+        fetch(
+          "http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "30e0a5",
+            },
+            body: JSON.stringify({
+              sessionId: "30e0a5",
+              runId: "pre-fix",
+              hypothesisId: "D",
+              location: "Dashboard.jsx:load(finally)",
+              message: "Dashboard load finally",
+              data: { setLoadingTo: false },
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
         // #endregion
         setLoading(false);
       }
@@ -994,93 +1260,140 @@ const Dashboard = ({ token, onRequestLogin }) => {
 
   // ── Thresholds aligned to scoring.py ──
   // #region agent log
-  fetch('http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'30e0a5'},body:JSON.stringify({sessionId:'30e0a5',runId:'pre-fix',hypothesisId:'B',location:'Dashboard.jsx:render(calc)',message:'Dashboard render calc inputs',data:{historyIsArray:Array.isArray(history),historyLen:Array.isArray(history)?history.length:null,historyType:typeof history},timestamp:Date.now()})}).catch(()=>{});
+  fetch("http://127.0.0.1:7802/ingest/5abc6598-7ccd-4f14-91d0-abc58a73c2ad", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "30e0a5",
+    },
+    body: JSON.stringify({
+      sessionId: "30e0a5",
+      runId: "pre-fix",
+      hypothesisId: "B",
+      location: "Dashboard.jsx:render(calc)",
+      message: "Dashboard render calc inputs",
+      data: {
+        historyIsArray: Array.isArray(history),
+        historyLen: Array.isArray(history) ? history.length : null,
+        historyType: typeof history,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
   // #endregion
-  const total    = history.length;
-  const critical = history.filter(s => s.risk_score >= 75).length;
-  const high     = history.filter(s => s.risk_score >= 50 && s.risk_score < 75).length;
-  const warning  = history.filter(s => s.risk_score >= 25 && s.risk_score < 50).length;
-  const safe     = history.filter(s => s.risk_score < 25).length;
-  const threats  = critical + high; // combined high-risk count for stat card
+  const total = history.length;
+  const critical = history.filter((s) => s.risk_score >= 75).length;
+  const high = history.filter(
+    (s) => s.risk_score >= 50 && s.risk_score < 75,
+  ).length;
+  const warning = history.filter(
+    (s) => s.risk_score >= 25 && s.risk_score < 50,
+  ).length;
+  const safe = history.filter((s) => s.risk_score < 25).length;
+  const threats = critical + high; // combined high-risk count for stat card
 
   const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
   const pieData = [
-    { name: "Safe",     value: safe     },
-    { name: "Warning",  value: warning  },
-    { name: "High",     value: high     },
+    { name: "Safe", value: safe },
+    { name: "Warning", value: warning },
+    { name: "High", value: high },
     { name: "Critical", value: critical },
-  ].filter(d => d.value > 0);
+  ].filter((d) => d.value > 0);
 
   const recent = [...history]
     .sort((a, b) => new Date(b.scan_time) - new Date(a.scan_time))
     .slice(0, 6);
 
   // ── Loading
-  if (loading) return (
-    <>
-      <FontLoader />
-      <style>{styles}</style>
-      <div className="db-root">
-        <div className="db-grid-bg" />
-        <div className="db-content">
-          <div className="db-state-box">
-            <Loader2 size={28} style={{ color: "var(--cyan)", animation: "spin 1s linear infinite" }} />
-            <span>// LOADING DASHBOARD</span>
+  if (loading)
+    return (
+      <>
+        <FontLoader />
+        <style>{styles}</style>
+        <div className="db-root">
+          <div className="db-grid-bg" />
+          <div className="db-content">
+            <div className="db-state-box">
+              <Loader2
+                size={28}
+                style={{
+                  color: "var(--cyan)",
+                  animation: "spin 1s linear infinite",
+                }}
+              />
+              <span>// LOADING DASHBOARD</span>
+            </div>
           </div>
         </div>
-      </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </>
-  );
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </>
+    );
 
   // ── Error
-  if (error) return (
-    <>
-      <FontLoader />
-      <style>{styles}</style>
-      <div className="db-root">
-        <div className="db-grid-bg" />
-        <div className="db-content">
-          <div className="db-state-box" style={{ color: "var(--danger)" }}>
-            <XOctagon size={28} />
-            <span>{error}</span>
+  if (error)
+    return (
+      <>
+        <FontLoader />
+        <style>{styles}</style>
+        <div className="db-root">
+          <div className="db-grid-bg" />
+          <div className="db-content">
+            <div className="db-state-box" style={{ color: "var(--danger)" }}>
+              <XOctagon size={28} />
+              <span>{error}</span>
+            </div>
           </div>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
 
   // ── No data
-  if (total === 0) return (
-    <>
-      <FontLoader />
-      <style>{styles}</style>
-      <div className="db-root">
-        <div className="db-grid-bg" />
-        <div className="db-content">
-          <div className="db-header">
-            <div className="db-header-left">
-              <div className="db-eyebrow"><span className="db-eyebrow-dot" /> Security Overview</div>
-              <h1 className="db-title">Your <span>Dashboard</span></h1>
-            </div>
-          </div>
-          <div className="db-card db-state-box" style={{ minHeight: 420 }}>
-            <Lock size={32} style={{ color: "var(--cyan)", opacity: 0.5 }} />
-            <div>
-              <div style={{ color: "var(--text)", marginBottom: 6, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1.1rem" }}>
-                No scans yet
+  if (total === 0)
+    return (
+      <>
+        <FontLoader />
+        <style>{styles}</style>
+        <div className="db-root">
+          <div className="db-grid-bg" />
+          <div className="db-content">
+            <div className="db-header">
+              <div className="db-header-left">
+                <div className="db-eyebrow">
+                  <span className="db-eyebrow-dot" /> Security Overview
+                </div>
+                <h1 className="db-title">
+                  Your <span>Dashboard</span>
+                </h1>
               </div>
-              <div>Run your first analysis to populate this dashboard.</div>
             </div>
-            <button className="db-no-data-cta" onClick={() => navigate("/scan")}>
-              <Search size={14} /> Analyze a URL <ArrowRight size={13} />
-            </button>
+            <div className="db-card db-state-box" style={{ minHeight: 420 }}>
+              <Lock size={32} style={{ color: "var(--cyan)", opacity: 0.5 }} />
+              <div>
+                <div
+                  style={{
+                    color: "var(--text)",
+                    marginBottom: 6,
+                    fontFamily: "'Syne', sans-serif",
+                    fontWeight: 700,
+                    fontSize: "1.1rem",
+                  }}
+                >
+                  No scans yet
+                </div>
+                <div>Run your first analysis to populate this dashboard.</div>
+              </div>
+              <button
+                className="db-no-data-cta"
+                onClick={() => navigate("/scan")}
+              >
+                <Search size={14} /> Analyze a URL <ArrowRight size={13} />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
 
   // ── Full dashboard
   return (
@@ -1092,7 +1405,6 @@ const Dashboard = ({ token, onRequestLogin }) => {
         <div className="db-grid-bg" />
 
         <div className="db-content">
-
           {/* ── Page header ─────────────────────────────── */}
           <div className="db-header">
             <div className="db-header-left">
@@ -1100,129 +1412,210 @@ const Dashboard = ({ token, onRequestLogin }) => {
                 <span className="db-eyebrow-dot" />
                 Security Overview · {total} scans total
               </div>
-              <h1 className="db-title">Your <span>Dashboard</span></h1>
+              <h1 className="db-title">
+                Your <span>Dashboard</span>
+              </h1>
             </div>
             <div className="db-header-actions">
-              <button className="db-action-btn ghost" onClick={() => navigate("/history")}>
+              {/* NEW ADMIN TOGGLE BUTTON */}
+              <button
+                className={`db-action-btn ${isAdminView ? "primary" : "ghost"}`}
+                onClick={toggleAdminView}
+              >
+                <Users size={14} /> {isAdminView ? "Exit Admin" : "Admin Panel"}
+              </button>
+
+              <button
+                className="db-action-btn ghost"
+                onClick={() => navigate("/history")}
+              >
                 <History size={14} /> History
               </button>
-              <button className="db-action-btn primary" onClick={() => navigate("/scan")}>
+              <button
+                className="db-action-btn primary"
+                onClick={() => navigate("/scan")}
+              >
                 <Search size={14} /> New Scan
               </button>
             </div>
           </div>
+          {/* ── Conditional Render: Admin View vs Main Dashboard ── */}
+          {isAdminView ? (
+            <div className="db-card db-admin-card">
+              <div className="db-admin-header">
+                <h2 className="db-admin-title">System Users Registry</h2>
+                <button
+                  className="db-action-btn ghost"
+                  onClick={fetchAdminUsers}
+                >
+                  <Search size={14} /> Refresh List
+                </button>
+              </div>
 
-          {/* ── Main: Donut | Stats 2×2 ─────────────────── */}
-          <div className="db-main-grid">
-
-            {/* Donut chart */}
-            <div className="db-card db-chart-card">
-              <div className="db-card-label">// threat distribution</div>
-              <div className="db-chart-inner">
-                <ResponsiveContainer width="100%" height={240}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%" cy="50%"
-                      innerRadius={72} outerRadius={106}
-                      paddingAngle={3}
-                      dataKey="value"
-                      strokeWidth={0}
-                      onMouseEnter={(_, i) => setActivePie(i)}
-                      onMouseLeave={() => setActivePie(null)}
-                    >
-                      {pieData.map((entry, i) => (
-                        <Cell
-                          key={entry.name}
-                          fill={PIE_COLORS[entry.name]}
-                          opacity={activePie === null || activePie === i ? 1 : 0.35}
+              {loadingAdmin ? (
+                <div className="db-state-box">
+                  <Loader2
+                    size={24}
+                    style={{
+                      animation: "spin 1s linear infinite",
+                      color: "var(--cyan)",
+                    }}
+                  />
+                  <span>// FETCHING SECURE REGISTRY</span>
+                </div>
+              ) : (
+                <div className="db-admin-list">
+                  {adminUsers.map((u) => (
+                    <div key={u.id} className="db-admin-row">
+                      <div className="db-admin-avatar">
+                        {u.picture ? (
+                          <img src={u.picture} alt={u.name} />
+                        ) : (
+                          <Users size={18} color="var(--cyan)" />
+                        )}
+                      </div>
+                      <div className="db-admin-info">
+                        <div className="db-admin-name">
+                          {u.name || "Unnamed User"}
+                        </div>
+                        <div className="db-admin-email">{u.email}</div>
+                      </div>
+                      <div className="db-admin-badge">ID: {u.id}</div>
+                    </div>
+                  ))}
+                  {adminUsers.length === 0 && (
+                    <div className="db-feed-empty">
+                      // no users found or access denied (403)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* ── Main: Donut | Stats 2×2 ─────────────────── */}
+              <div className="db-main-grid">
+                {/* Donut chart */}
+                <div className="db-card db-chart-card">
+                  <div className="db-card-label">// threat distribution</div>
+                  <div className="db-chart-inner">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={72}
+                          outerRadius={106}
+                          paddingAngle={3}
+                          dataKey="value"
+                          strokeWidth={0}
+                          onMouseEnter={(_, i) => setActivePie(i)}
+                          onMouseLeave={() => setActivePie(null)}
+                        >
+                          {pieData.map((entry, i) => (
+                            <Cell
+                              key={entry.name}
+                              fill={PIE_COLORS[entry.name]}
+                              opacity={
+                                activePie === null || activePie === i ? 1 : 0.35
+                              }
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="db-donut-center">
+                      <div className="db-donut-big">{total}</div>
+                      <div className="db-donut-sub">Total Scans</div>
+                    </div>
+                  </div>
+                  <div className="db-legend">
+                    {pieData.map((d) => (
+                      <div className="db-legend-item" key={d.name}>
+                        <div
+                          className="db-legend-swatch"
+                          style={{ background: PIE_COLORS[d.name] }}
                         />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="db-donut-center">
-                  <div className="db-donut-big">{total}</div>
-                  <div className="db-donut-sub">Total Scans</div>
+                        {d.name}
+                        <span className="db-legend-count">({d.value})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2×2 stat cards */}
+                <div className="db-stats-grid">
+                  <StatCard
+                    colorClass="c-total"
+                    icon={<Activity size={16} color="#00e5ff" />}
+                    tag="ALL TIME"
+                    value={total}
+                    label="Total Scans"
+                    pct={100}
+                  />
+                  <StatCard
+                    colorClass="c-threats"
+                    icon={<XOctagon size={16} color="#ff4d6d" />}
+                    tag="HIGH + CRITICAL"
+                    value={threats}
+                    label="Threats Detected"
+                    pct={pct(threats)}
+                  />
+                  <StatCard
+                    colorClass="c-caution"
+                    icon={<AlertTriangle size={16} color="#ffb703" />}
+                    tag="WARNING"
+                    value={warning}
+                    label="Flagged for Review"
+                    pct={pct(warning)}
+                  />
+                  <StatCard
+                    colorClass="c-safe"
+                    icon={<ShieldCheck size={16} color="#06d6a0" />}
+                    tag="VERIFIED SAFE"
+                    value={safe}
+                    label="Clean Links"
+                    pct={pct(safe)}
+                  />
                 </div>
               </div>
-              <div className="db-legend">
-                {pieData.map(d => (
-                  <div className="db-legend-item" key={d.name}>
-                    <div className="db-legend-swatch" style={{ background: PIE_COLORS[d.name] }} />
-                    {d.name}
-                    <span className="db-legend-count">({d.value})</span>
-                  </div>
-                ))}
+
+              {/* ── Category breakdown card ───────────────────── */}
+              <CategoryBreakdownCard history={history} />
+
+              {/* ── Recent scans feed ────────────────────────── */}
+              <div className="db-card db-feed-card">
+                <div className="db-feed-header">
+                  <span className="db-feed-title">
+                    // recent activity · click row to expand risk factors
+                  </span>
+                  <button
+                    className="db-feed-link"
+                    onClick={() => navigate("/history")}
+                  >
+                    View all <ArrowRight size={11} />
+                  </button>
+                </div>
+
+                {recent.length === 0 ? (
+                  <div className="db-feed-empty">// no recent scans</div>
+                ) : (
+                  recent.map((scan) => (
+                    <FeedRow
+                      key={scan.id}
+                      scan={scan}
+                      tierClass={tierClassOf(scan.risk_score)}
+                      tierLabel={tierLabelOf(scan)}
+                      tierIcon={tierIconOf(scan.risk_score)}
+                      score={scan.risk_score}
+                    />
+                  ))
+                )}
               </div>
-            </div>
-
-            {/* 2×2 stat cards */}
-            <div className="db-stats-grid">
-              <StatCard
-                colorClass="c-total"
-                icon={<Activity size={16} color="#00e5ff" />}
-                tag="ALL TIME"
-                value={total}
-                label="Total Scans"
-                pct={100}
-              />
-              <StatCard
-                colorClass="c-threats"
-                icon={<XOctagon size={16} color="#ff4d6d" />}
-                tag="HIGH + CRITICAL"
-                value={threats}
-                label="Threats Detected"
-                pct={pct(threats)}
-              />
-              <StatCard
-                colorClass="c-caution"
-                icon={<AlertTriangle size={16} color="#ffb703" />}
-                tag="WARNING"
-                value={warning}
-                label="Flagged for Review"
-                pct={pct(warning)}
-              />
-              <StatCard
-                colorClass="c-safe"
-                icon={<ShieldCheck size={16} color="#06d6a0" />}
-                tag="VERIFIED SAFE"
-                value={safe}
-                label="Clean Links"
-                pct={pct(safe)}
-              />
-            </div>
-          </div>
-
-          {/* ── Category breakdown card ───────────────────── */}
-          <CategoryBreakdownCard history={history} />
-
-          {/* ── Recent scans feed ────────────────────────── */}
-          <div className="db-card db-feed-card">
-            <div className="db-feed-header">
-              <span className="db-feed-title">// recent activity · click row to expand risk factors</span>
-              <button className="db-feed-link" onClick={() => navigate("/history")}>
-                View all <ArrowRight size={11} />
-              </button>
-            </div>
-
-            {recent.length === 0 ? (
-              <div className="db-feed-empty">// no recent scans</div>
-            ) : (
-              recent.map(scan => (
-                <FeedRow
-                  key={scan.id}
-                  scan={scan}
-                  tierClass={tierClassOf(scan.risk_score)}
-                  tierLabel={tierLabelOf(scan)}
-                  tierIcon={tierIconOf(scan.risk_score)}
-                  score={scan.risk_score}
-                />
-              ))
-            )}
-          </div>
-
+            </>
+          )}
         </div>
       </div>
     </>

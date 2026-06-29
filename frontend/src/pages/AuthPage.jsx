@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import './AuthPage.css';
 
-const AuthPage = () => {
+// We accept onLogin as a prop so we can tell App.jsx that the user logged in
+const AuthPage = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
+  
+  // State for the manual email/password form
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  
+  const navigate = useNavigate();
 
+  // 1. Handle Google Authentication
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       const res = await fetch('http://localhost:8000/api/v1/auth/google-login', {
@@ -12,10 +23,72 @@ const AuthPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: credentialResponse.credential }),
       });
+      
+      if (!res.ok) throw new Error("Google authentication failed on backend");
+      
       const data = await res.json();
-      console.log('Login Successful:', data);
+      
+      // Pass the token up to the main App state, or fallback to localStorage
+      if (onLogin) {
+        onLogin(data.access_token);
+      } else {
+        localStorage.setItem("safenav_token", data.access_token);
+      }
+      
+      toast.success('Successfully logged in with Google!');
+      navigate('/dashboard'); // Redirect to dashboard
     } catch (error) {
       console.error('Error authenticating with backend', error);
+      toast.error('Google login failed.');
+    }
+  };
+
+  // 2. Handle Standard Email/Password Authentication
+  const handleEmailSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      if (isLogin) {
+        // FastAPI OAuth2PasswordRequestForm expects form-urlencoded data
+        const fd = new URLSearchParams();
+        fd.append("username", email);
+        fd.append("password", password);
+        
+        const res = await fetch('http://localhost:8000/api/v1/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: fd,
+        });
+        
+        if (!res.ok) throw new Error("Login failed");
+        
+        const data = await res.json();
+        
+        if (onLogin) onLogin(data.access_token);
+        else localStorage.setItem("safenav_token", data.access_token);
+        
+        toast.success('Logged in successfully!');
+        navigate('/dashboard');
+        
+      } else {
+        // Registration Flow
+        const res = await fetch('http://localhost:8000/api/v1/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, full_name: fullName }),
+        });
+        
+        if (!res.ok) throw new Error("Registration failed");
+        
+        toast.success('Account created! Please sign in.');
+        setIsLogin(true); // Switch back to login view
+        setPassword('');  // Clear password for security
+      }
+    } catch (error) {
+      console.error('Auth error', error);
+      toast.error('Authentication failed. Check your credentials.');
     }
   };
 
@@ -34,6 +107,7 @@ const AuthPage = () => {
             onSuccess={handleGoogleSuccess}
             onError={() => {
               console.log('Google Login Failed');
+              toast.error('Google login window closed or failed.');
             }}
             theme="filled_black"
             shape="rectangular"
@@ -46,12 +120,33 @@ const AuthPage = () => {
           <span>OR CONTINUE WITH EMAIL</span>
         </div>
 
-        <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
+        <form className="auth-form" onSubmit={handleEmailSubmit}>
           {!isLogin && (
-            <input type="text" placeholder="Full Name" className="auth-input" />
+            <input 
+              type="text" 
+              placeholder="Full Name" 
+              className="auth-input" 
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
           )}
-          <input type="email" placeholder="Email Address" className="auth-input" />
-          <input type="password" placeholder="Password" className="auth-input" />
+          <input 
+            type="email" 
+            placeholder="Email Address" 
+            className="auth-input" 
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input 
+            type="password" 
+            placeholder="Password" 
+            className="auth-input" 
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
           
           <button type="submit" className="auth-submit-btn">
             {isLogin ? 'Sign In' : 'Sign Up'}

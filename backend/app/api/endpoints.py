@@ -458,3 +458,17 @@ async def background_fetch_ct(hostname: str):
 
     except Exception as e:
         print(f"[BACKGROUND ⚠️] Failed to fetch CT logs for {hostname}: {e}")
+
+
+@router.get("/admin/users")
+async def get_all_users(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    # Only allow access if the email matches your admin email
+    if current_user.email != "your-admin-email@gmail.com":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    result = await db.execute(select(User))
+    users = result.scalars().all()
+    return [{"id": u.id, "email": u.email, "name": u.full_name, "picture": u.profile_pic} for u in users]

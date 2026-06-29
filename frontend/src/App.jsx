@@ -473,7 +473,7 @@ const App = () => {
               <LandingPage token={token} onRequestLogin={triggerAuthModal} />
             }
           />
-          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth" element={<AuthPage onLogin={handleLogin} />} />
           <Route
             path="/dashboard"
             element={
