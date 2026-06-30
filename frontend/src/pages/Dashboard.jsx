@@ -279,7 +279,7 @@ const tierIconOf = (score) => {
 };
 
 // ─── Main component ────────
-const Dashboard = ({ token, onRequestLogin, user }) => {
+const Dashboard = ({ user, token, onRequestLogin }) => {
   const navigate = useNavigate();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);

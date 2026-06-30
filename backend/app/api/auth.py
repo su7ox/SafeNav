@@ -61,10 +61,18 @@ async def google_login(auth_data: GoogleAuthToken, db: AsyncSession = Depends(ge
             data={"sub": db_user.email}, expires_delta=access_token_expires
         )
 
+        # In backend/app/api/auth.py (around line 43)
+
         return {
             "status": "success",
             "message": "Login successful",
-            "user": {"email": db_user.email},
+            "user": {
+                "id": db_user.id,
+                "email": db_user.email,
+                "name": db_user.full_name or "SafeNav User",
+                "picture": db_user.profile_pic or "",
+                "is_admin": bool(db_user.is_admin) 
+            },
             "access_token": access_token,
         }
 

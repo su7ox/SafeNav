@@ -327,7 +327,8 @@ const AuthModal = ({ onClose, onLogin, title }) => {
         fd.append("username", email);
         fd.append("password", password);
         const res = await axios.post(`${API_URL}/login`, fd);
-        onLogin(res.data.access_token);
+        onLogin(res.data.access_token, res.data.user);
+
         toast.success("Logged in successfully!");
       }
     } catch {
@@ -398,9 +399,9 @@ const AuthModal = ({ onClose, onLogin, title }) => {
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem("safenav_token"));
   const [user, setUser] = useState(() => {
-  const savedUser = localStorage.getItem('safenav_user');
-  return savedUser ? JSON.parse(savedUser) : null;
-});
+    const savedUser = localStorage.getItem("safenav_user");
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMessage, setAuthMessage] = useState("Login");
   const [darkMode, setDarkMode] = useState(false);
@@ -433,16 +434,16 @@ const App = () => {
   };
 
   const handleLogin = (newToken, userData) => {
-  setToken(newToken);
-  localStorage.setItem("safenav_token", newToken);
-  
-  if (userData) {
-    setUser(userData);
-    localStorage.setItem("safenav_user", JSON.stringify(userData));
-  }
-  
-  setShowAuthModal(false);
-};
+    setToken(newToken);
+    localStorage.setItem("safenav_token", newToken);
+
+    if (userData) {
+      setUser(userData);
+      localStorage.setItem("safenav_user", JSON.stringify(userData));
+    }
+
+    setShowAuthModal(false);
+  };
 
   const handleLogout = () => {
     setToken(null);
