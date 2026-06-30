@@ -397,6 +397,10 @@ const AuthModal = ({ onClose, onLogin, title }) => {
 // ─────────────────────────────────────────────
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem("safenav_token"));
+  const [user, setUser] = useState(() => {
+  const savedUser = localStorage.getItem('safenav_user');
+  return savedUser ? JSON.parse(savedUser) : null;
+});
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMessage, setAuthMessage] = useState("Login");
   const [darkMode, setDarkMode] = useState(false);
@@ -428,15 +432,23 @@ const App = () => {
     setShowAuthModal(true);
   };
 
-  const handleLogin = (newToken) => {
-    setToken(newToken);
-    localStorage.setItem("safenav_token", newToken);
-    setShowAuthModal(false);
-  };
+  const handleLogin = (newToken, userData) => {
+  setToken(newToken);
+  localStorage.setItem("safenav_token", newToken);
+  
+  if (userData) {
+    setUser(userData);
+    localStorage.setItem("safenav_user", JSON.stringify(userData));
+  }
+  
+  setShowAuthModal(false);
+};
 
   const handleLogout = () => {
     setToken(null);
     localStorage.removeItem("safenav_token");
+    localStorage.removeItem("safenav_user");
+    setUser(null);
     navigate("/");
     toast("Logged out.", { icon: "👋" });
   };
@@ -477,7 +489,11 @@ const App = () => {
           <Route
             path="/dashboard"
             element={
-              <Dashboard token={token} onRequestLogin={triggerAuthModal} />
+              <Dashboard
+                token={token}
+                onRequestLogin={triggerAuthModal}
+                user={user}
+              />
             }
           />
           <Route

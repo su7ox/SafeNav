@@ -250,8 +250,7 @@ const FeedRow = ({ scan, tierClass, tierLabel, tierIcon, score }) => {
   );
 };
 
-// ─── Verdict helpers (aligned to scoring.py tiers) ───────────────────────────
-// scoring.py: CRITICAL ≥75 | HIGH ≥50 | WARNING ≥25 | SAFE <25
+// ─── Verdict helpers (aligned to scoring.py tiers) ──────────────
 const tierClassOf = (score) => {
   if (score >= 75) return "critical";
   if (score >= 50) return "high";
@@ -279,8 +278,8 @@ const tierIconOf = (score) => {
   return <ShieldCheck size={10} />;
 };
 
-// ─── Main component ───────────────────────────────────────────────────────────
-const Dashboard = ({ token, onRequestLogin }) => {
+// ─── Main component ────────
+const Dashboard = ({ token, onRequestLogin, user }) => {
   const navigate = useNavigate();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);

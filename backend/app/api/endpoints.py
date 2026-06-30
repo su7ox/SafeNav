@@ -127,9 +127,11 @@ async def login(
         "user": {
             "id": user.id,
             "email": user.email,
-            "name": user.full_name,
-            "picture": user.profile_pic,
-            "is_admin": user.is_admin  
+            # If full_name is None, send a default string instead to prevent React from crashing
+            "name": user.full_name or "SafeNav User",  
+            "picture": user.profile_pic or "",
+            # Force it to be a True/False boolean instead of null
+            "is_admin": bool(user.is_admin)  
         }
     }
 

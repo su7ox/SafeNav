@@ -28,15 +28,16 @@ const AuthPage = ({ onLogin }) => {
       
       const data = await res.json();
       
-      // Pass the token up to the main App state, or fallback to localStorage
+      // --- UPDATE HERE ---
       if (onLogin) {
-        onLogin(data.access_token);
+        onLogin(data.access_token, data.user); 
       } else {
         localStorage.setItem("safenav_token", data.access_token);
+        localStorage.setItem("safenav_user", JSON.stringify(data.user)); // Store user!
       }
       
       toast.success('Successfully logged in with Google!');
-      navigate('/dashboard'); // Redirect to dashboard
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error authenticating with backend', error);
       toast.error('Google login failed.');
@@ -62,12 +63,12 @@ const AuthPage = ({ onLogin }) => {
           body: fd,
         });
         
-        if (!res.ok) throw new Error("Login failed");
-        
-        const data = await res.json();
-        
-        if (onLogin) onLogin(data.access_token);
-        else localStorage.setItem("safenav_token", data.access_token);
+        if (onLogin) {
+          onLogin(data.access_token, data.user);
+        } else {
+          localStorage.setItem("safenav_token", data.access_token);
+          localStorage.setItem("safenav_user", JSON.stringify(data.user));
+        }
         
         toast.success('Logged in successfully!');
         navigate('/dashboard');

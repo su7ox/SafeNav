@@ -7,8 +7,6 @@ from google.auth.transport import requests
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
-
-# Your project imports
 from app.core.database import get_db
 from app.core.models import User
 from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -32,7 +30,6 @@ async def google_login(auth_data: GoogleAuthToken, db: AsyncSession = Depends(ge
         )
 
     try:
-        # Verify the token with Google's servers
         idinfo = id_token.verify_oauth2_token(
             auth_data.token, requests.Request(), GOOGLE_CLIENT_ID
         )
@@ -59,7 +56,6 @@ async def google_login(auth_data: GoogleAuthToken, db: AsyncSession = Depends(ge
         await db.commit()
         await db.refresh(db_user)
 
-        # Generate your FastAPI JWT token for the session
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": db_user.email}, expires_delta=access_token_expires
