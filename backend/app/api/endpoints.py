@@ -108,7 +108,6 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"message": "User registered successfully"}
 
-
 @router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
@@ -120,8 +119,19 @@ async def login(
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
     access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
-
+    
+    
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.full_name,
+            "picture": user.profile_pic,
+            "is_admin": user.is_admin  
+        }
+    }
 
 @router.post("/scan")
 async def analyze_url(
@@ -465,10 +475,19 @@ async def get_all_users(
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    # Only allow access if the email matches your admin email
-    if current_user.email != "your-admin-email@gmail.com":
+    # REAL WORLD WAY: Check the database role, not a hardcoded email
+    if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
         
     result = await db.execute(select(User))
     users = result.scalars().all()
-    return [{"id": u.id, "email": u.email, "name": u.full_name, "picture": u.profile_pic} for u in users]
+    return [
+    {
+        "id": u.id, 
+        "email": u.email, 
+        "name": u.full_name, 
+        "picture": u.profile_pic,
+        "is_admin": u.is_admin  
+    } 
+    for u in users
+]

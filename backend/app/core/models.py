@@ -16,6 +16,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     profile_pic = Column(String, nullable=True)
+    is_admin = Column(Boolean, default=False)
 
 
 class ScanHistory(Base):
