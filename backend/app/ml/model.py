@@ -12,7 +12,9 @@ never break a scan.
 """
 
 from __future__ import annotations
-
+from app.core.trust_manager import trust_manager
+from app.analyzers.lexical import LexicalReport
+from app.ml.features import vectorize
 import os
 
 import joblib
@@ -26,8 +28,8 @@ _MODEL_PATH = os.path.join(
 
 # Calibrate these against your validation set after training — these are
 # reasonable starting points, not tuned values.
-_LOW_THRESHOLD = 0.30
-_HIGH_THRESHOLD = 0.70
+_LOW_THRESHOLD = 0.50
+_HIGH_THRESHOLD = 0.80
 
 
 class PhishingMLModel:
@@ -54,12 +56,19 @@ class PhishingMLModel:
             print(f"[PhishingMLModel] Failed to load model: {e}")
             self.loaded = False
 
-    def score(self, report: LexicalReport) -> dict:
-        """
-        Returns {"phishing_probability": float|None, "phishing_risk_bucket": str}.
-        Bucket is one of Low/Medium/High/Unknown.
-        """
+    def score(self, report: LexicalReport, url: str = "") -> dict:
+        # If the domain is in the top 100k list, ML adds no signal
+        if url and trust_manager.is_major_domain(url):
+            return {
+                "phishing_probability": 0.0,
+                "phishing_risk_bucket": "Low",
+            }
+
         if not self.loaded or self.model is None:
+            return {
+                "phishing_probability": None,
+                "phishing_risk_bucket": "Unknown",
+            }
             return {
                 "phishing_probability": None,
                 "phishing_risk_bucket": "Unknown",
@@ -86,7 +95,6 @@ class PhishingMLModel:
             "phishing_probability": round(probability, 4),
             "phishing_risk_bucket": bucket,
         }
-
 
 
 phishing_ml_model = PhishingMLModel()

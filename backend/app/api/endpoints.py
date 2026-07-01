@@ -4,16 +4,19 @@ import asyncio
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from langsmith import trace
+from numpy import vectorize
 from pydantic import BaseModel, EmailStr
 from urllib.parse import urlparse
 from datetime import datetime
 
 # SQLAlchemy Imports
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
 
 # ML Model Imports
+from app.ml.features import vectorize
 from app.ml.model import phishing_ml_model
 
 # Utilities
@@ -246,7 +249,9 @@ async def analyze_url(
         raise HTTPException(status_code=500, detail=str(e))
 
     ml_result = phishing_ml_model.score(lexical)
-
+    print(f"[ML DEBUG] model loaded: {phishing_ml_model.loaded}")
+    print(f"[ML DEBUG] raw probability: {ml_result['phishing_probability']}")
+    print(f"[ML DEBUG] features: {vectorize(lexical)}")
     is_typosquat = lexical.typosquat_target is not None
     brand_detected = lexical.typosquat_target if is_typosquat else "None"
     suspicious_kw = bool(lexical.found_keywords)

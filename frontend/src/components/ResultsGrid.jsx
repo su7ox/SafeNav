@@ -5,17 +5,13 @@ import './SafeNavResults.css';
 export const ResultsGrid = ({ results }) => {
   if (!results || !results.details) return null;
   const d = results.details;
-
   const truncate = (str, len) => str?.length > len ? str.substring(0, len) + '…' : str;
-
-
   const link = d.link_structure || {};
 
-// --- 1. SSL & Security  ---
+  // --- SSL & Security Logic ---
   const ssl = d.ssl_security || {};
   let sslPills = [...(ssl.warning_flags || [])];
   if (ssl.is_self_signed) sslPills.push("Self-Signed Certificate");
-
 
   const sslBadge = ssl.is_valid 
     ? { text: "Connection Secured", color: 'badge-green' }
@@ -26,7 +22,6 @@ export const ResultsGrid = ({ results }) => {
     ? "Verified Business" 
     : "Hidden (Standard) ";
 
-  // The new Plain-English Fields
   const sslFields = [
     { 
       label: "Privacy (Encryption)", 
@@ -46,25 +41,32 @@ export const ResultsGrid = ({ results }) => {
     }
   ];
 
-  // --- 2. Phishing Checks ---
+  // --- Phishing Checks Logic ---
   const phish = d.phishing_checks || {};
   const phishRisks = [phish.typosquatting, phish.brand_similarity, phish.suspicious_keywords, phish.homograph_attack]
     .some(v => v && v !== 'No' && v !== 'None' && v !== false);
     
-  const phishBadge = phishRisks ? { text: "⚠ Risk Detected", color: 'badge-red' } : { text: "Clean", color: 'badge-green' };
-  
+  // ML augments the badge — High bucket → red, Medium → yellow, Unknown is ignored
+  const mlBucket = phish.ml_risk_bucket || 'Unknown';
+  const phishBadge = (phishRisks || mlBucket === 'High')  
+    ? { text: "⚠ Risk Detected", color: 'badge-red' }  
+    : mlBucket === 'Medium'  
+    ? { text: "⚠ Possible Risk", color: 'badge-yellow' }  
+    : { text: "Clean", color: 'badge-green' };
+
   const phishFields = [
-    { label: "Typosquatting", value: phish.typosquatting || 'No', type: "phishing" },
-    { label: "Brand Similarity", value: phish.brand_similarity || 'None', type: "phishing" },
-    { label: "Suspicious Keywords", value: phish.suspicious_keywords || 'No', type: "phishing" },
-    { label: "Homograph Attack", value: phish.homograph_attack || 'No', type: "phishing" },
-    { label: "Obfuscation", value: link.is_obfuscated ? 'Yes' : 'No', type: "phishing" } 
+    { label: "Typosquatting",        value: phish.typosquatting || 'No',          type: "phishing" },
+    { label: "Brand Similarity",     value: phish.brand_similarity || 'None',      type: "phishing" },
+    { label: "Suspicious Keywords",  value: phish.suspicious_keywords || 'No',     type: "phishing" },
+    { label: "Homograph Attack",     value: phish.homograph_attack || 'No',        type: "phishing" },
+    { label: "Obfuscation",          value: link.is_obfuscated ? 'Yes' : 'No',     type: "phishing" },
+    { label: "ML Phishing Score",    value: phish.ml_phishing_probability ?? 'unknown', type: "ml-probability" },
+    { label: "ML Risk Bucket",       value: mlBucket,                              type: "ml-bucket" }
   ];
 
-  // --- 3. IP Intelligence (Streamlined) ---
+  // --- IP Intelligence Logic ---
   const ip = d.ip_intelligence || {};
   
-  // Cleanly format the server location (e.g., "United States 🇺🇸 · New York")
   const serverLocation = [ip.hosting_country, ip.hosting_flag, ip.hosting_city]
     .filter(Boolean)
     .join(' ');

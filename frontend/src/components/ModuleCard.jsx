@@ -2,7 +2,6 @@ import React from 'react';
 import { FieldRow } from './FieldRow';
 import { WarningPills } from './WarningPills';
 import './SafeNavResults.css';
-
 export const ModuleCard = ({ title, icon, statusBadge, fields = [], warningFlags = [] }) => {
   return (
     <div className="module-card">
@@ -16,9 +15,7 @@ export const ModuleCard = ({ title, icon, statusBadge, fields = [], warningFlags
           </div>
         )}
       </div>
-      
       <hr className="card-divider" />
-      
       <div className="card-body">
         {fields.map((field, idx) => (
           <FieldRow 
