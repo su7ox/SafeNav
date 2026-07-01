@@ -6,13 +6,11 @@ from app.api.auth import router as auth_router
 from app.core.database import engine, Base
 from app.core.models import User, ScanHistory
 from app.core.trust_manager import trust_manager
-
+from app.ml.model import phishing_ml_model
 
 # --- LIFECYCLE MANAGEMENT ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ------------------ STARTUP EVENTS ------------------
-    # 1. Initialize PostgreSQL Database tables
     try:
         async with engine.begin() as conn:
             # Note: In production, use a migration tool like Alembic instead of create_all
@@ -24,6 +22,7 @@ async def lifespan(app: FastAPI):
     # 2. Load top domains list into memory cache
     try:
         trust_manager.load_cache()
+        phishing_ml_model.load()
         print("✅ Trust manager data loaded successfully!")
     except Exception as e:
         print(f"❌ Failed to load trust manager data: {e}")

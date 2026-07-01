@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc
 
+# ML Model Imports
+from app.ml.model import phishing_ml_model
+
 # Utilities
 from app.utils.timer import ExecutionTimer
 from app.utils.cache_manager import ScanCache
@@ -108,6 +111,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"message": "User registered successfully"}
 
+
 @router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
@@ -119,21 +123,21 @@ async def login(
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
     access_token = create_access_token(data={"sub": user.email})
-    
-    
+
     return {
-        "access_token": access_token, 
+        "access_token": access_token,
         "token_type": "bearer",
         "user": {
             "id": user.id,
             "email": user.email,
             # If full_name is None, send a default string instead to prevent React from crashing
-            "name": user.full_name or "SafeNav User",  
+            "name": user.full_name or "SafeNav User",
             "picture": user.profile_pic or "",
             # Force it to be a True/False boolean instead of null
-            "is_admin": bool(user.is_admin)  
-        }
+            "is_admin": bool(user.is_admin),
+        },
     }
+
 
 @router.post("/scan")
 async def analyze_url(
@@ -241,6 +245,8 @@ async def analyze_url(
         print(f"Scan Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+    ml_result = phishing_ml_model.score(lexical)
+
     is_typosquat = lexical.typosquat_target is not None
     brand_detected = lexical.typosquat_target if is_typosquat else "None"
     suspicious_kw = bool(lexical.found_keywords)
@@ -307,6 +313,8 @@ async def analyze_url(
         "brand_impersonation_signals": content_data.brand_impersonation_signals,
         "content_risk_score": content_data.risk_score_contribution,
         "content_warning_flags": content_data.warning_flags,
+        "ml_phishing_probability": ml_result["phishing_probability"],
+        "ml_risk_bucket": ml_result["phishing_risk_bucket"],
     }
 
     risk_assessment = calculate_risk_score(combined_scan_data)
@@ -329,6 +337,8 @@ async def analyze_url(
             ),
             "suspicious_keywords": "Yes" if suspicious_kw else "No",
             "homograph_attack": "Yes" if is_homograph else "No",
+            "ml_phishing_probability": ml_result["phishing_probability"],
+            "ml_risk_bucket": ml_result["phishing_risk_bucket"],
         },
         "domain_reputation": {
             "domain_age": dom_age_display,
@@ -474,22 +484,21 @@ async def background_fetch_ct(hostname: str):
 
 @router.get("/admin/users")
 async def get_all_users(
-    db: AsyncSession = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     # REAL WORLD WAY: Check the database role, not a hardcoded email
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
-        
+
     result = await db.execute(select(User))
     users = result.scalars().all()
     return [
-    {
-        "id": u.id, 
-        "email": u.email, 
-        "name": u.full_name, 
-        "picture": u.profile_pic,
-        "is_admin": u.is_admin  
-    } 
-    for u in users
-]
+        {
+            "id": u.id,
+            "email": u.email,
+            "name": u.full_name,
+            "picture": u.profile_pic,
+            "is_admin": u.is_admin,
+        }
+        for u in users
+    ]
