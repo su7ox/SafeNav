@@ -99,7 +99,8 @@ Redirect data made human-readable.
 **🌐 Who Owns This Domain**
 Ownership signals without raw technical data.
 - Domain Age: Plain English ("Registered 4 days ago")
-- Country: Flag + Country name
+- Country: where the server is located
+- Network provider: to that server
 - VPN / Proxy: Detected / No
 
 ### AI Summary Layer
